@@ -15,21 +15,40 @@ outputs: {}
 runs:
   using: composite
   steps:
+    # Annoyingly there's no global 'env' block available in composite actions and as such we have to use this
+    # workaround. If there's any other environment variables we need, we should update this block.
+    #
+    # See: https://github.com/orgs/community/discussions/51280 for more details
+    - name: "Setup Workflow Variables"
+      id: globals
+      shell: bash
+      run: |
+        BASE_ARTIFACT_REGISTRY_NAME=us-central1-docker.pkg.dev
+        PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID=platform-mgmt-service-e0izz
+
+        echo "APOLLO_ARTIFACT_REGISTRY=${BASE_ARTIFACT_REGISTRY_NAME}/platform-cross-environment/platform-docker" >> "${GITHUB_OUTPUT}"
+        echo "BASE_ARTIFACT_REGISTRY_NAME=${BASE_ARTIFACT_REGISTRY_NAME}" >> "${GITHUB_OUTPUT}"
+
+        # This project/service account are provisioned in apollo-terraform. In the longer term we should move
+        # this to somewhere we control, but that should be in line with us owning an internal publishing repository
+        echo "PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID=${PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID}" >> "${GITHUB_OUTPUT}"
+        echo "PUBLISHING_SERVICE_ACCOUNT_NAME=release-tooling-automation@${PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID}.iam.gserviceaccount.com" >> "${GITHUB_OUTPUT}"
+        echo "WORKLOAD_IDENTITY_PROVIDER=projects/865738624352/locations/global/workloadIdentityPools/github-d8bck/providers/github-d8bck" >> "${GITHUB_OUTPUT}"
     - name: Authenticate With GCP
       id: gcp-auth
       uses: 'google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093'
       with:
         token_format: 'access_token'
-        project_id: "${{ secrets.PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID }}"
-        service_account: "${{ secrets.PUBLISHING_SERVICE_ACCOUNT_NAME }}"
-        workload_identity_provider: "${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}"
+        project_id: "${{ steps.globals.outputs.PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID }}"
+        service_account: "${{ steps.globals.outputs.PUBLISHING_SERVICE_ACCOUNT_NAME }}"
+        workload_identity_provider: "${{ steps.globals.outputs.WORKLOAD_IDENTITY_PROVIDER }}"
     - name: Authenticate With Internal Repository
       id: docker-auth
       uses: 'docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef'
       with:
         username: 'oauth2accesstoken'
         password: '${{ steps.gcp-auth.outputs.access_token }}'
-        registry: '${{ secrets.BASE_ARTIFACT_REGISTRY_NAME }}'
+        registry: '${{ steps.globals.outputs.BASE_ARTIFACT_REGISTRY_NAME }}'
     - name: Log in to GHCR
       uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef
       with:
@@ -51,5 +70,5 @@ runs:
     - name: "Retag and push image to GHCR"
       run: |
         NEW_TAG=${{ steps.ensure-correct-name.outputs.CORRECTED_IMAGE_NAME }}:${{ inputs.version_number }}
-        docker buildx imagetools create -t $NEW_TAG ${{ secrets.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}:${{ inputs.commit_sha }}
+        docker buildx imagetools create -t $NEW_TAG ${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}:${{ inputs.commit_sha }}
       shell: bash
