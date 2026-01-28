@@ -66,7 +66,7 @@ runs:
       uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130
     - name: Get Docker Metadata
       id: meta
-      uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051
+      uses: docker/metadata-action@ed95091677497158a9ff38b314264cd965388d5e
       env:
         DOCKER_METADATA_PR_HEAD_SHA: true
       with:
