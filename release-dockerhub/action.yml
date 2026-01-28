@@ -1,0 +1,48 @@
+name: "Release to DockerHub"
+description: "Republish a Docker Image, with a known SHA, from Apollo's internal repositories to DockerHub"
+inputs:
+  image_name:
+    description: 'The name of the Docker Image that is to be built'
+    required: true
+  commit_sha:
+    description: "The commit SHA of the image to re-publish"
+    required: true
+  version_number:
+    description: "The version number that is to be used for the release"
+    required: true
+outputs: {}
+
+runs:
+  using: composite
+  steps:
+    - name: Authenticate With GCP
+      id: gcp-auth
+      uses: 'google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093'
+      with:
+        token_format: 'access_token'
+        project_id: "${{ secrets.PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID }}"
+        service_account: "${{ secrets.PUBLISHING_SERVICE_ACCOUNT_NAME }}"
+        workload_identity_provider: "${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}"
+    - name: Authenticate With Internal Repository
+      id: docker-auth
+      uses: 'docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef'
+      with:
+        username: 'oauth2accesstoken'
+        password: '${{ steps.gcp-auth.outputs.access_token }}'
+        registry: '${{ secrets.BASE_ARTIFACT_REGISTRY_NAME }}'
+    - name: Fetch DockerHub Credential
+      id: fetch-dockerhub-credential
+      uses: google-github-actions/get-secretmanager-secrets@50ec04d56ddf2740b0bde82926cc742f90e06d2b
+      with:
+        secrets: |-
+          token:platform-prod-service-q8dyj/docker_hub_push_token
+    - name: Docker Auth
+      uses: 'docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef'
+      with:
+        username: 'apollograph'
+        password: '${{ steps.fetch-dockerhub-credential.outputs.token }}'
+    - name: "Retag and push image to DockerHub"
+      run: |
+        NEW_TAG=apollograph/${{ inputs.image_name }}:${{ inputs.version_number }}
+        docker buildx imagetools create -t $NEW_TAG ${{ secrets.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}:${{ inputs.commit_sha }}
+      shell: bash
