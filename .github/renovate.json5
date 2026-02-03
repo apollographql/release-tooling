@@ -11,5 +11,16 @@
   // want to miss one. For more information see: https://docs.renovatebot.com/configuration-options/#schedule
   schedule: [
     '* * * * * *'
+  ],
+  packageRules: [
+    {
+      matchManagers: [
+        'github-actions'
+      ],
+      digest: {
+        groupName: 'GitHub Actions Digests',
+        groupSlug: 'gha-digests'
+      }
+    }
   ]
 }
