@@ -1,7 +1,7 @@
 name: "Test RTF Custom Providers"
 description: "Run tests for RTF custom providers using the rtf-toolbox image"
 inputs:
-  search_directories:
+  directories:
     description: "A comma separated list of directories to search for RTF custom providers"
     required: true
   provider_filename:
@@ -61,5 +61,5 @@ runs:
           -e APOLLO_KEY=dummy_key_for_validation \
           "${RTF_IMAGE}" \
           /toolbox/scripts/test-custom-providers.sh \
-          "${{ inputs.search_directories }}" \
+          "${{ inputs.directories }}" \
           "${{ inputs.provider_filename }}"
