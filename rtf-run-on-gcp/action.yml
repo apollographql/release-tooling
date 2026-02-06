@@ -1,0 +1,110 @@
+name: "Run RTF Test Plan on GCP VM"
+description: "Run an RTF test plan on a dedicated GCP VM with optional Slack progress reporting"
+
+inputs:
+  test_plan_path:
+    description: "Path to the test plan YAML file (relative to repo root)"
+    required: true
+  variables_file:
+    description: "Path to a JSON file containing template variables"
+    required: false
+  slack_channel_id:
+    description: "Slack channel ID for progress updates (RTFBot must be a member)"
+    required: false
+  slack_token:
+    description: "Slack bot token for posting messages"
+    required: false
+  github_token:
+    description: "GitHub token for GitHub providers"
+    required: false
+  apollo_key:
+    description: "Apollo API key for GraphOS providers"
+    required: false
+  apollo_sudo:
+    description: "Enable Apollo sudo mode for elevated GraphOS permissions"
+    required: false
+  dd_api_key:
+    description: "Datadog API key for metric emission during test runs"
+    required: false
+  vm_timeout:
+    description: "Maximum VM runtime duration (e.g., '6h', '2h30m')"
+    required: false
+    default: "6h"
+
+outputs: {}
+
+runs:
+  using: composite
+  steps:
+    # Setup workflow variables
+    # Note: Composite actions don't support global env blocks, so we use outputs
+    # See: https://github.com/orgs/community/discussions/51280
+    - name: "Setup Workflow Variables"
+      id: globals
+      shell: bash
+      run: |
+        # GCP configuration - using rtf-morgue-github-actions SA for everything
+        # This is the simplest approach (Option 2) - single SA, single Workload Identity
+        GCP_PROJECT=runtime-testing-framework
+        SERVICE_ACCOUNT_NAME=rtf-morgue-github-actions
+
+        echo "GCP_PROJECT=${GCP_PROJECT}" >> "${GITHUB_OUTPUT}"
+        echo "SERVICE_ACCOUNT_NAME=${SERVICE_ACCOUNT_NAME}" >> "${GITHUB_OUTPUT}"
+        echo "SERVICE_ACCOUNT=${SERVICE_ACCOUNT_NAME}@${GCP_PROJECT}.iam.gserviceaccount.com" >> "${GITHUB_OUTPUT}"
+        echo "WORKLOAD_IDENTITY_PROVIDER=projects/230145797925/locations/global/workloadIdentityPools/github-actions/providers/apollographql" >> "${GITHUB_OUTPUT}"
+
+        # VM naming
+        echo "VM_NAME=rtf-gha-${GITHUB_RUN_ID}" >> "${GITHUB_OUTPUT}"
+
+        # RTF toolbox image location
+        echo "RTF_IMAGE=us-central1-docker.pkg.dev/platform-cross-environment/platform-docker/rtf-toolbox:edge" >> "${GITHUB_OUTPUT}"
+
+    # Single GCP authentication using rtf-morgue-github-actions service account
+    - name: "Authenticate With GCP"
+      id: gcp-auth
+      uses: "google-github-actions/auth@fc2174804b84f912b1f6d334e9463f484f1c552d"
+      with:
+        project_id: "${{ steps.globals.outputs.GCP_PROJECT }}"
+        service_account: "${{ steps.globals.outputs.SERVICE_ACCOUNT }}"
+        workload_identity_provider: "${{ steps.globals.outputs.WORKLOAD_IDENTITY_PROVIDER }}"
+
+    # Setup gcloud CLI
+    - name: "Set up Cloud SDK"
+      uses: "google-github-actions/setup-gcloud@v2"
+      with:
+        version: ">= 363.0.0"
+
+    # Setup SSH for gcloud
+    - name: "Setup SSH for gcloud"
+      shell: bash
+      run: |
+        mkdir -p ~/.ssh
+        ssh-keygen -t rsa -f ~/.ssh/google_compute_engine -N ""
+        gcloud config set core/disable_prompts true
+
+    # Run the test plan on GCP VM
+    - name: "Run Test Plan on GCP VM"
+      shell: bash
+      env:
+        # Inputs
+        TEST_PLAN_PATH: ${{ inputs.test_plan_path }}
+        VARIABLES_FILE: ${{ inputs.variables_file }}
+        SLACK_CHANNEL_ID: ${{ inputs.slack_channel_id }}
+        SLACK_TOKEN: ${{ inputs.slack_token }}
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+        APOLLO_KEY: ${{ inputs.apollo_key }}
+        APOLLO_SUDO: ${{ inputs.apollo_sudo }}
+        DD_API_KEY: ${{ inputs.dd_api_key }}
+        VM_TIMEOUT: ${{ inputs.vm_timeout }}
+        # GCP configuration
+        GCP_PROJECT: ${{ steps.globals.outputs.GCP_PROJECT }}
+        SERVICE_ACCOUNT_NAME: ${{ steps.globals.outputs.SERVICE_ACCOUNT_NAME }}
+        VM_NAME: ${{ steps.globals.outputs.VM_NAME }}
+        RTF_IMAGE: ${{ steps.globals.outputs.RTF_IMAGE }}
+        # GitHub context
+        TRIGGERING_USER: ${{ github.triggering_actor }}
+        GH_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        REPO_NAME: ${{ github.event.repository.name }}
+      run: |
+        ACTION_PATH="${{ github.action_path }}"
+        "${ACTION_PATH}/scripts/run-on-gcp.sh"
