@@ -2,24 +2,43 @@
 # Execute an RTF test plan on a VM using the rtf-toolbox Docker image.
 # This script runs on the remote VM, not the GitHub Actions runner.
 #
-# Arguments:
-#   $1 - Test plan path (relative to home directory)
-#   $2 - Apollo key (or "NOT_SET")
-#   $3 - Apollo sudo mode ("true" or "false")
-#   $4 - RTF toolbox Docker image
-#   $5 - GitHub token (or "NOT_SET")
-#   $6 - Datadog API key (or "NOT_SET")
-#   $7+ - Additional RTF arguments
+# Required flags:
+#   --test-plan <path>   - Test plan path (relative to home directory)
+#   --image <image>      - RTF toolbox Docker image
+#
+# Optional flags:
+#   --apollo-key <key>   - Apollo API key
+#   --apollo-sudo        - Enable Apollo sudo mode (boolean flag)
+#   --github-token <tok> - GitHub token
+#   --dd-api-key <key>   - Datadog API key
+#   --                   - Everything after this passes through to RTF
 
 set -euo pipefail
 
-TEST_PLAN="$1"
-APOLLO_KEY_ARG="$2"
-APOLLO_SUDO_ARG="$3"
-RTF_IMAGE="$4"
-GITHUB_TOKEN_ARG="$5"
-DD_API_KEY_ARG="$6"
-shift 6
+# Defaults
+TEST_PLAN=""
+APOLLO_KEY=""
+APOLLO_SUDO=false
+RTF_IMAGE=""
+GITHUB_TOKEN=""
+DD_API_KEY=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --test-plan) TEST_PLAN="$2"; shift 2 ;;
+    --apollo-key) APOLLO_KEY="$2"; shift 2 ;;
+    --apollo-sudo) APOLLO_SUDO=true; shift ;;
+    --image) RTF_IMAGE="$2"; shift 2 ;;
+    --github-token) GITHUB_TOKEN="$2"; shift 2 ;;
+    --dd-api-key) DD_API_KEY="$2"; shift 2 ;;
+    --) shift; break ;;
+    *) echo "Unknown option: $1" >&2; exit 1 ;;
+  esac
+done
+
+# Validation
+[ -z "$TEST_PLAN" ] && { echo "ERROR: --test-plan is required" >&2; exit 1; }
+[ -z "$RTF_IMAGE" ] && { echo "ERROR: --image is required" >&2; exit 1; }
 
 OUTDIR="output"
 
@@ -28,17 +47,17 @@ rm -rf "$OUTDIR/"
 
 # Build Docker environment arguments
 ENV_ARGS=()
-if [ "$APOLLO_KEY_ARG" != "NOT_SET" ]; then
-  ENV_ARGS+=("-e" "APOLLO_KEY=$APOLLO_KEY_ARG")
+if [ -n "$APOLLO_KEY" ]; then
+  ENV_ARGS+=("-e" "APOLLO_KEY=$APOLLO_KEY")
 fi
-if [ "$APOLLO_SUDO_ARG" = "true" ]; then
+if [ "$APOLLO_SUDO" = "true" ]; then
   ENV_ARGS+=("-e" "APOLLO_SUDO=true")
 fi
-if [ "$GITHUB_TOKEN_ARG" != "NOT_SET" ]; then
-  ENV_ARGS+=("-e" "GITHUB_TOKEN=$GITHUB_TOKEN_ARG")
+if [ -n "$GITHUB_TOKEN" ]; then
+  ENV_ARGS+=("-e" "GITHUB_TOKEN=$GITHUB_TOKEN")
 fi
-if [ "$DD_API_KEY_ARG" != "NOT_SET" ]; then
-  ENV_ARGS+=("-e" "DD_API_KEY=$DD_API_KEY_ARG")
+if [ -n "$DD_API_KEY" ]; then
+  ENV_ARGS+=("-e" "DD_API_KEY=$DD_API_KEY")
 fi
 
 SUCCESS=false
@@ -57,7 +76,7 @@ if sudo docker run --rm \
   -w "$HOME" \
   "${ENV_ARGS[@]}" \
   "$RTF_IMAGE" \
-  rtf run "$TEST_PLAN" --outdir "$OUTDIR" $*; then
+  rtf run "$TEST_PLAN" --outdir "$OUTDIR" "$@"; then
   echo "Test plan execution complete"
   SUCCESS=true
 else

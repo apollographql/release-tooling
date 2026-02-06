@@ -5,17 +5,24 @@
 # It authenticates to Artifact Registry using the VM's service account
 # and pulls the rtf-toolbox Docker image.
 #
-# Arguments:
-#   $1 - RTF toolbox image to pull
+# Required flags:
+#   --image <image> - RTF toolbox image to pull
 
 set -euo pipefail
 
-if [ "$#" -ne 1 ]; then
-  echo "Usage: $0 <RTF_IMAGE>"
-  exit 1
-fi
+# Defaults
+RTF_IMAGE=""
 
-RTF_IMAGE="$1"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --image) RTF_IMAGE="$2"; shift 2 ;;
+    --) shift; break ;;
+    *) echo "Unknown option: $1" >&2; exit 1 ;;
+  esac
+done
+
+# Validation
+[ -z "$RTF_IMAGE" ] && { echo "ERROR: --image is required" >&2; exit 1; }
 
 echo "Disabling unattended upgrades..."
 sudo systemctl disable --now unattended-upgrades

@@ -53,14 +53,18 @@ GCLOUD_SSH_WRAPPER="${SCRIPT_DIR}/gcloud-ssh-wrapper.sh"
 # =============================================================================
 
 SLACK_ENABLED=false
+SLACK_THREAD_TS=""
 if [ -n "$SLACK_TOKEN" ] && [ -n "$SLACK_CHANNEL_ID" ]; then
   SLACK_ENABLED=true
-  export SLACK_TOKEN SLACK_CHANNEL_ID
 fi
 
 function slack_message {
   if [ "$SLACK_ENABLED" = "true" ]; then
-    "${SCRIPT_DIR}/send-slack-message.sh" "$@"
+    "${SCRIPT_DIR}/send-slack-message.sh" \
+      --token "$SLACK_TOKEN" \
+      --channel "$SLACK_CHANNEL_ID" \
+      ${SLACK_THREAD_TS:+--thread-ts "$SLACK_THREAD_TS"} \
+      --message "$*"
   else
     echo "[Slack] $*"
   fi
@@ -68,7 +72,11 @@ function slack_message {
 
 function slack_file {
   if [ "$SLACK_ENABLED" = "true" ]; then
-    "${SCRIPT_DIR}/share-file-to-slack.sh" "$@"
+    "${SCRIPT_DIR}/share-file-to-slack.sh" \
+      --token "$SLACK_TOKEN" \
+      --channel "$SLACK_CHANNEL_ID" \
+      ${SLACK_THREAD_TS:+--thread-ts "$SLACK_THREAD_TS"} \
+      --file "$1"
   else
     echo "[Slack] Would upload: $*"
   fi
@@ -158,14 +166,30 @@ function setup_vm {
   rsync_to_vm "$vm_name" "${SCRIPT_DIR}/vm/" "./.rtf-action/"
   rsync_to_vm "$vm_name" "${GITHUB_WORKSPACE:-.}/" "./${REPO_NAME}/"
   heading "Setting up RTF toolbox"
-  vm_ssh "$vm_name" bash -i "./.rtf-action/setup-vm.sh" "$RTF_IMAGE"
+  vm_ssh "$vm_name" bash -i "./.rtf-action/setup-vm.sh" --image "$RTF_IMAGE"
 }
 
 function run_test_plan {
-  local vm_name="$1" test_plan="$2" extra_args="${3:-}"
+  local vm_name="$1"
+  local test_plan="$2"
+  shift 2
+
+  local args=(
+    --test-plan "$test_plan"
+    --image "$RTF_IMAGE"
+  )
+  [ -n "${APOLLO_KEY:-}" ] && args+=(--apollo-key "$APOLLO_KEY")
+  [ "${APOLLO_SUDO:-}" = "true" ] && args+=(--apollo-sudo)
+  [ -n "${GITHUB_TOKEN:-}" ] && args+=(--github-token "$GITHUB_TOKEN")
+  [ -n "${DD_API_KEY:-}" ] && args+=(--dd-api-key "$DD_API_KEY")
+
+  if [ $# -gt 0 ]; then
+    args+=(--)
+    args+=("$@")
+  fi
+
   heading "Running: $test_plan"
-  vm_ssh "$vm_name" bash -i "./.rtf-action/execute-test-plan.sh" \
-    "$test_plan" "${APOLLO_KEY:-NOT_SET}" "${APOLLO_SUDO:-false}" "$RTF_IMAGE" "${GITHUB_TOKEN:-NOT_SET}" "${DD_API_KEY:-NOT_SET}" "$extra_args"
+  vm_ssh "$vm_name" bash -i "./.rtf-action/execute-test-plan.sh" "${args[@]}"
 }
 
 function collect_results {
@@ -195,7 +219,6 @@ echo "  Slack: $SLACK_ENABLED"
 # Start Slack thread
 if [ "$SLACK_ENABLED" = "true" ]; then
   SLACK_THREAD_TS="$(slack_message ":frog-thread: Starting RTF run <${GH_RUN_URL}|here>\n- Test: \`${TEST_PLAN_PATH}\`\n- By: \`${TRIGGERING_USER}\`")"
-  export SLACK_THREAD_TS
 fi
 
 # Create and setup VM
@@ -214,10 +237,10 @@ slack_message ":frog-eyes: Test plan: <${GH_BASE}/${TEST_PLAN_PATH}|link>"
 slack_message ":frog-run: Running..."
 
 TEST_PLAN_PATH_VM="${REPO_NAME}/${TEST_PLAN_PATH}"
-EXTRA_ARGS=""
-[ -n "$VARIABLES_FILE" ] && EXTRA_ARGS="--vars ${REPO_NAME}/${VARIABLES_FILE}"
+RUN_ARGS=("$VM_FULL_NAME" "$TEST_PLAN_PATH_VM")
+[ -n "$VARIABLES_FILE" ] && RUN_ARGS+=(--vars "${REPO_NAME}/${VARIABLES_FILE}")
 
-if run_test_plan "$VM_FULL_NAME" "$TEST_PLAN_PATH_VM" "$EXTRA_ARGS"; then
+if run_test_plan "${RUN_ARGS[@]}"; then
   slack_message ":yay-frog: Complete!"
   slack_message ":frog-reading: Collecting results..."
   collect_results "$VM_FULL_NAME"

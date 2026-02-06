@@ -1,34 +1,40 @@
 #!/usr/bin/env bash
 # Send messages to Slack using a bot API token.
 #
-# Required environment variables:
-#   SLACK_TOKEN      - Slack bot API token
-#   SLACK_CHANNEL_ID - Target channel ID
+# Required flags:
+#   --token <token>      - Slack bot API token
+#   --channel <id>       - Target channel ID
+#   --message <text>     - Message text
 #
-# Optional environment variables:
-#   SLACK_THREAD_TS  - Thread timestamp for replies
+# Optional flags:
+#   --thread-ts <ts>     - Thread timestamp for replies
 #
-# Usage:
-#   SLACK_CHANNEL_ID="..." SLACK_TOKEN="..." ./send-slack-message.sh 'Hello, world!'
-#
-# To create threads, capture the output of this script and set it as SLACK_THREAD_TS
-# for subsequent messages.
+# To create threads, capture the output of this script and pass it as
+# --thread-ts for subsequent messages.
 
 set -euo pipefail
 
-: "${SLACK_TOKEN:=""}"
-: "${SLACK_THREAD_TS:=""}"
-: "${SLACK_CHANNEL_ID:=""}"
+# Defaults
+SLACK_TOKEN=""
+SLACK_CHANNEL_ID=""
+SLACK_THREAD_TS=""
+MESSAGE=""
 
-if [ -z "$SLACK_TOKEN" ]; then
-  echo "ERROR: SLACK_TOKEN environment variable is not set" >&2
-  exit 1
-fi
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --token) SLACK_TOKEN="$2"; shift 2 ;;
+    --channel) SLACK_CHANNEL_ID="$2"; shift 2 ;;
+    --thread-ts) SLACK_THREAD_TS="$2"; shift 2 ;;
+    --message) MESSAGE="$2"; shift 2 ;;
+    --) shift; break ;;
+    *) echo "Unknown option: $1" >&2; exit 1 ;;
+  esac
+done
 
-if [ -z "$SLACK_CHANNEL_ID" ]; then
-  echo "ERROR: SLACK_CHANNEL_ID environment variable is not set" >&2
-  exit 1
-fi
+# Validation
+[ -z "$SLACK_TOKEN" ] && { echo "ERROR: --token is required" >&2; exit 1; }
+[ -z "$SLACK_CHANNEL_ID" ] && { echo "ERROR: --channel is required" >&2; exit 1; }
+[ -z "$MESSAGE" ] && { echo "ERROR: --message is required" >&2; exit 1; }
 
 if [ -n "$SLACK_THREAD_TS" ]; then
   THREAD_DETAILS=", \"thread_ts\": \"$SLACK_THREAD_TS\""
@@ -39,6 +45,6 @@ fi
 curl -s \
   -H 'Content-type: application/json; charset=utf-8' \
   -H "Authorization: Bearer $SLACK_TOKEN" \
-  -d "{ \"channel\": \"$SLACK_CHANNEL_ID\", \"text\": \"$*\" $THREAD_DETAILS }" \
+  -d "{ \"channel\": \"$SLACK_CHANNEL_ID\", \"text\": \"$MESSAGE\" $THREAD_DETAILS }" \
   "https://slack.com/api/chat.postMessage" |
   jq -r '.ts'

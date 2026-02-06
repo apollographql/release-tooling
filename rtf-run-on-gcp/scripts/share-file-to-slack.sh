@@ -1,34 +1,39 @@
 #!/usr/bin/env bash
 # Upload a file to Slack using a bot API token.
 #
-# Required environment variables:
-#   SLACK_TOKEN      - Slack bot API token
-#   SLACK_CHANNEL_ID - Target channel ID
+# Required flags:
+#   --token <token>    - Slack bot API token
+#   --channel <id>     - Target channel ID
+#   --file <path>      - File to upload
 #
-# Optional environment variables:
-#   SLACK_THREAD_TS  - Thread timestamp for sharing in a thread
-#
-# Usage:
-#   SLACK_CHANNEL_ID="..." SLACK_TOKEN="..." ./share-file-to-slack.sh results.tar.gz
+# Optional flags:
+#   --thread-ts <ts>   - Thread timestamp for sharing in a thread
 
 set -euo pipefail
 
-: "${SLACK_TOKEN:=""}"
-: "${SLACK_THREAD_TS:=""}"
-: "${SLACK_CHANNEL_ID:=""}"
+# Defaults
+SLACK_TOKEN=""
+SLACK_CHANNEL_ID=""
+SLACK_THREAD_TS=""
+FILE=""
 
-FILE="$1"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --token) SLACK_TOKEN="$2"; shift 2 ;;
+    --channel) SLACK_CHANNEL_ID="$2"; shift 2 ;;
+    --thread-ts) SLACK_THREAD_TS="$2"; shift 2 ;;
+    --file) FILE="$2"; shift 2 ;;
+    --) shift; break ;;
+    *) echo "Unknown option: $1" >&2; exit 1 ;;
+  esac
+done
+
+# Validation
+[ -z "$SLACK_TOKEN" ] && { echo "ERROR: --token is required" >&2; exit 1; }
+[ -z "$SLACK_CHANNEL_ID" ] && { echo "ERROR: --channel is required" >&2; exit 1; }
+[ -z "$FILE" ] && { echo "ERROR: --file is required" >&2; exit 1; }
+
 FNAME="$(basename "$FILE")"
-
-if [ -z "$SLACK_TOKEN" ]; then
-  echo "ERROR: SLACK_TOKEN environment variable is not set" >&2
-  exit 1
-fi
-
-if [ -z "$SLACK_CHANNEL_ID" ]; then
-  echo "ERROR: SLACK_CHANNEL_ID environment variable is not set" >&2
-  exit 1
-fi
 
 if [ ! -f "$FILE" ]; then
   echo "ERROR: File not found: $FILE" >&2
