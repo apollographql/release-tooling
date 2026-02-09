@@ -43,7 +43,12 @@ done
 OUTDIR="output"
 
 echo "Deleting any pre-existing RTF output directory..."
-rm -rf "$OUTDIR/"
+sudo rm -rf "$OUTDIR/"
+
+# Pre-create output directory with open permissions so containers
+# (which may run as non-root) can write results into the mounted volume
+mkdir -p "$OUTDIR"
+chmod 777 "$OUTDIR"
 
 # Build Docker environment arguments
 ENV_ARGS=()
@@ -67,11 +72,13 @@ echo "Using RTF image: $RTF_IMAGE"
 
 # Run RTF inside the toolbox container
 # - Mount Docker socket for nested container execution
+# - Mount Docker config so GHCR credentials are available to docker compose
 # - Mount home directory as workspace
 # - Set working directory to home
 # - Use sudo for Docker access since user may not be in docker group
 if sudo docker run --rm \
   -v /var/run/docker.sock:/var/run/docker.sock \
+  -v /root/.docker/config.json:/root/.docker/config.json:ro \
   -v "$HOME:$HOME" \
   -w "$HOME" \
   "${ENV_ARGS[@]}" \

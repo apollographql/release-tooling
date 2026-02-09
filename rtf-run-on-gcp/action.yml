@@ -101,6 +101,8 @@ runs:
         SERVICE_ACCOUNT_NAME: ${{ steps.globals.outputs.SERVICE_ACCOUNT_NAME }}
         VM_NAME: ${{ steps.globals.outputs.VM_NAME }}
         RTF_IMAGE: ${{ steps.globals.outputs.RTF_IMAGE }}
+        # GHCR authentication (implicit github.token, not the user-supplied github_token)
+        GHCR_TOKEN: ${{ github.token }}
         # GitHub context
         TRIGGERING_USER: ${{ github.triggering_actor }}
         GH_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

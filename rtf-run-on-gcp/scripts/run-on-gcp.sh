@@ -19,6 +19,7 @@
 #   APOLLO_KEY           - Apollo API key
 #   APOLLO_SUDO          - Enable Apollo sudo mode
 #   DD_API_KEY           - Datadog API key for metric emission
+#   GHCR_TOKEN           - GitHub token for ghcr.io authentication
 #   VM_TIMEOUT           - Maximum VM runtime (default: 6h)
 
 set -euo pipefail
@@ -41,6 +42,7 @@ FILTER_OUT="WARNING:"
 : "${GITHUB_TOKEN:=""}"
 : "${APOLLO_KEY:=""}"
 : "${DD_API_KEY:=""}"
+: "${GHCR_TOKEN:=""}"
 : "${VARIABLES_FILE:=""}"
 : "${GCP_PROJECT:="runtime-testing-framework"}"
 : "${SERVICE_ACCOUNT_NAME:="rtf-morgue-github-actions"}"
@@ -166,7 +168,9 @@ function setup_vm {
   rsync_to_vm "$vm_name" "${SCRIPT_DIR}/vm/" "./.rtf-action/"
   rsync_to_vm "$vm_name" "${GITHUB_WORKSPACE:-.}/" "./${REPO_NAME}/"
   heading "Setting up RTF toolbox"
-  vm_ssh "$vm_name" bash -i "./.rtf-action/setup-vm.sh" --image "$RTF_IMAGE"
+  local args=(--image "$RTF_IMAGE")
+  [ -n "${GHCR_TOKEN:-}" ] && args+=(--ghcr-token "$GHCR_TOKEN")
+  vm_ssh "$vm_name" bash -i "./.rtf-action/setup-vm.sh" "${args[@]}"
 }
 
 function run_test_plan {
