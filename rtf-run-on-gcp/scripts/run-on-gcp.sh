@@ -212,11 +212,9 @@ function collect_results {
 [ -z "${RTF_IMAGE:-}" ] && error_and_exit "RTF_IMAGE is required"
 [ -z "${REPO_NAME:-}" ] && error_and_exit "REPO_NAME is required"
 
-VM_FULL_NAME="rtf-${VM_NAME}"
-
 heading "RTF Run on GCP"
 echo "  Test Plan: $TEST_PLAN_PATH"
-echo "  VM: $VM_FULL_NAME"
+echo "  VM: $VM_NAME"
 echo "  Timeout: $VM_TIMEOUT"
 echo "  Slack: $SLACK_ENABLED"
 
@@ -226,14 +224,14 @@ if [ "$SLACK_ENABLED" = "true" ]; then
 fi
 
 # Create and setup VM
-slack_message ":frog-typing-away: Creating VM \`${VM_FULL_NAME}\`..."
-if ! create_vm "$VM_FULL_NAME"; then
+slack_message ":frog-typing-away: Creating VM \`${VM_NAME}\`..."
+if ! create_vm "$VM_NAME"; then
   slack_message ":frog-alarm: VM creation failed"
   exit 1
 fi
 slack_message ":frog-thumbs-up: VM created"
 
-setup_vm "$VM_FULL_NAME"
+setup_vm "$VM_NAME"
 
 # Run test
 GH_BASE="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-}/blob/${GITHUB_REF_NAME:-main}"
@@ -241,23 +239,23 @@ slack_message ":frog-eyes: Test plan: <${GH_BASE}/${TEST_PLAN_PATH}|link>"
 slack_message ":frog-run: Running..."
 
 TEST_PLAN_PATH_VM="${REPO_NAME}/${TEST_PLAN_PATH}"
-RUN_ARGS=("$VM_FULL_NAME" "$TEST_PLAN_PATH_VM")
+RUN_ARGS=("$VM_NAME" "$TEST_PLAN_PATH_VM")
 [ -n "$VARIABLES_FILE" ] && RUN_ARGS+=(--vars "${REPO_NAME}/${VARIABLES_FILE}")
 
 if run_test_plan "${RUN_ARGS[@]}"; then
   slack_message ":yay-frog: Complete!"
   slack_message ":frog-reading: Collecting results..."
-  collect_results "$VM_FULL_NAME"
+  collect_results "$VM_NAME"
 
   [ -f "output/results.tar.gz" ] && {
     slack_message ":frog-rocket: Uploading results..."
     slack_file "output/results.tar.gz"
   }
 
-  slack_message ":frog-good-thinking: VM \`${VM_FULL_NAME}\` available for ${VM_TIMEOUT}"
+  slack_message ":frog-good-thinking: VM \`${VM_NAME}\` available for ${VM_TIMEOUT}"
   heading "Done"
 else
   slack_message ":frog-alarm: Test failed"
-  slack_message ":frog-stop: VM \`${VM_FULL_NAME}\` available for ${VM_TIMEOUT}"
+  slack_message ":frog-stop: VM \`${VM_NAME}\` available for ${VM_TIMEOUT}"
   exit 1
 fi
