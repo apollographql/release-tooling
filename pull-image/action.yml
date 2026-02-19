@@ -4,16 +4,23 @@ inputs:
   image_name:
     description: 'The name of the Docker Image that is to be pulled'
     required: true
-  commit_sha:
-    description: "The commit SHA of the image to be pulled"
+  tag:
+    description: "The tag of the image to be pulled (will either be a commit SHA or 'edge')"
     required: true
   platform:
     description: "The platform to pull the image for (i.e. linux/amd64)"
     default: linux/amd64
 outputs:
-  image_tag:
+  image_reference:
     value: ${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}:${{ inputs.commit_sha }}
-    description: The full image tag that has been pulled, for ease of use later on
+    description: The full image reference that has been pulled (i.e. apollo/my-image:012abcf)
+  image_name:
+    value: ${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}
+    description: The full image name that has been pulled (i.e. apollo/my-image)
+  image_tag:
+    value: ${{ inputs.tag }}
+    description: The image tag that has been pulled (i.e. 012abcf)
+
 
 runs:
   using: composite
