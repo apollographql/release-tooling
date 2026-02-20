@@ -1,0 +1,164 @@
+name: Build and Publish Image
+
+on:
+  workflow_call:
+    inputs:
+      image_name:
+        description: "The name of the Docker Image that is to be built"
+        required: true
+        type: string
+      image_description:
+        description: "A description of the image being built"
+        required: true
+        type: string
+      platforms:
+        description: "JSON array of {platform, runner} objects"
+        required: false
+        type: string
+        default: '[{"platform":"linux/amd64","runner":"ubuntu-latest"}]'
+      context:
+        description: "The path to the context that should be used to build the Docker Image"
+        required: true
+        type: string
+      dockerfile_location:
+        description: "The path to the Dockerfile that is to be built"
+        required: true
+        type: string
+
+jobs:
+  build:
+    name: "Build ${{ inputs.image_name }} (${{ matrix.platform }})"
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include: ${{ fromJSON(inputs.platforms) }}
+    steps:
+      - name: Compute platform slug
+        id: slug
+        run: echo "platform=${PLATFORM//\//-}" >> "$GITHUB_OUTPUT"
+        env:
+          PLATFORM: ${{ matrix.platform }}
+      - name: Checkout Code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - name: Build Docker Image
+        uses: docker/build-push-action@64c9b141502b80dbbd71e008a0130ad330f480f8
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.dockerfile_location }}
+          platforms: ${{ matrix.platform }}
+          push: false
+          outputs: type=docker,dest=${{ runner.temp }}/${{ inputs.image_name }}.tar
+          labels: |
+            org.opencontainers.image.title=${{ inputs.image_name }}
+            org.opencontainers.image.description=${{ inputs.image_description }}
+            org.opencontainers.image.vendor=Apollo GraphQL
+          cache-from: type=gha,scope=${{ matrix.platform }}-build
+          cache-to: type=gha,mode=max,scope=${{ matrix.platform }}-build
+      - name: Upload Image Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-${{ steps.slug.outputs.platform }}
+          path: ${{ runner.temp }}/${{ inputs.image_name }}.tar
+          retention-days: 1
+
+  push_manifest:
+    name: "Push ${{ inputs.image_name }} Manifest"
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Setup Variables
+        id: globals
+        run: |
+          BASE_ARTIFACT_REGISTRY_NAME=us-central1-docker.pkg.dev
+          PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID=platform-mgmt-service-e0izz
+
+          {
+            echo "APOLLO_ARTIFACT_REGISTRY=${BASE_ARTIFACT_REGISTRY_NAME}/platform-cross-environment/platform-docker"
+            echo "BASE_ARTIFACT_REGISTRY_NAME=${BASE_ARTIFACT_REGISTRY_NAME}"
+            echo "PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID=${PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID}"
+            echo "PUBLISHING_SERVICE_ACCOUNT_NAME=release-tooling-automation@${PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID}.iam.gserviceaccount.com"
+            echo "WORKLOAD_IDENTITY_PROVIDER=projects/865738624352/locations/global/workloadIdentityPools/github-d8bck/providers/github-d8bck"
+          } >> "${GITHUB_OUTPUT}"
+      - name: Authenticate With GCP
+        id: gcp-auth
+        uses: google-github-actions/auth@fc2174804b84f912b1f6d334e9463f484f1c552d
+        with:
+          token_format: "access_token"
+          project_id: ${{ steps.globals.outputs.PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID }}
+          service_account: ${{ steps.globals.outputs.PUBLISHING_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ steps.globals.outputs.WORKLOAD_IDENTITY_PROVIDER }}
+      - name: Authenticate With Internal Repository
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef
+        with:
+          username: "oauth2accesstoken"
+          password: ${{ steps.gcp-auth.outputs.access_token }}
+          registry: ${{ steps.globals.outputs.BASE_ARTIFACT_REGISTRY_NAME }}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - name: Install crane
+        uses: imjasonh/setup-crane@6da1ae018866400525525ce74ff892880c099987
+      - name: Download All Image Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: image-*
+          path: ${{ runner.temp }}/artifacts
+      - name: Push Images and Collect Digests
+        id: push
+        run: |
+          IMAGE="${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}"
+          DIGESTS=""
+          TEMP_TAGS=""
+
+          for dir in ${{ runner.temp }}/artifacts/image-*; do
+            PLATFORM_SLUG=$(basename "$dir" | sed 's/^image-//')
+            TAR="${dir}/${{ inputs.image_name }}.tar"
+            TEMP_TAG="_temp-${GITHUB_SHA}-${PLATFORM_SLUG}"
+
+            echo "Pushing ${TAR} as ${IMAGE}:${TEMP_TAG}"
+            crane push "${TAR}" "${IMAGE}:${TEMP_TAG}"
+
+            DIGEST=$(crane digest "${IMAGE}:${TEMP_TAG}")
+            DIGESTS="${DIGESTS} ${IMAGE}@${DIGEST}"
+            TEMP_TAGS="${TEMP_TAGS} ${TEMP_TAG}"
+          done
+
+          echo "digests=${DIGESTS}" >> "$GITHUB_OUTPUT"
+          echo "temp_tags=${TEMP_TAGS}" >> "$GITHUB_OUTPUT"
+      - name: Get Docker Metadata
+        id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051
+        env:
+          DOCKER_METADATA_PR_HEAD_SHA: true
+        with:
+          images: ${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}
+          tags: |
+            type=sha,format=long,prefix=,suffix=
+            type=ref,event=pr,prefix=PR-,suffix=-{{sha}},enable={{is_not_default_branch}}
+            type=ref,event=branch,suffix=-{{sha}},enable={{is_default_branch}}
+            type=raw,value=edge,enable={{is_default_branch}}
+      - name: Create Multi-Arch Manifest
+        run: |
+          TAGS=""
+          while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+            TAGS="${TAGS} -t ${tag}"
+          done <<< "${{ steps.meta.outputs.tags }}"
+
+          echo "Creating manifest with tags:${TAGS}"
+          echo "Source digests: ${{ steps.push.outputs.digests }}"
+          # shellcheck disable=SC2086
+          docker buildx imagetools create ${TAGS} ${{ steps.push.outputs.digests }}
+      - name: Cleanup Temp Tags
+        if: always()
+        run: |
+          IMAGE="${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}"
+          for TAG in ${{ steps.push.outputs.temp_tags }}; do
+            echo "Deleting temp tag: ${IMAGE}:${TAG}"
+            gcloud artifacts docker tags delete "${IMAGE}:${TAG}" --quiet 2>/dev/null || true
+          done
