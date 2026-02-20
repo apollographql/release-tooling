@@ -77,34 +77,27 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    env:
+      BASE_ARTIFACT_REGISTRY_NAME: us-central1-docker.pkg.dev
+      APOLLO_ARTIFACT_REGISTRY: us-central1-docker.pkg.dev/platform-cross-environment/platform-docker
+      PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID: platform-mgmt-service-e0izz
+      PUBLISHING_SERVICE_ACCOUNT_NAME: release-tooling-automation@platform-mgmt-service-e0izz.iam.gserviceaccount.com
+      WORKLOAD_IDENTITY_PROVIDER: projects/865738624352/locations/global/workloadIdentityPools/github-d8bck/providers/github-d8bck
     steps:
-      - name: Setup Variables
-        id: globals
-        run: |
-          BASE_ARTIFACT_REGISTRY_NAME=us-central1-docker.pkg.dev
-          PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID=platform-mgmt-service-e0izz
-
-          {
-            echo "APOLLO_ARTIFACT_REGISTRY=${BASE_ARTIFACT_REGISTRY_NAME}/platform-cross-environment/platform-docker"
-            echo "BASE_ARTIFACT_REGISTRY_NAME=${BASE_ARTIFACT_REGISTRY_NAME}"
-            echo "PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID=${PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID}"
-            echo "PUBLISHING_SERVICE_ACCOUNT_NAME=release-tooling-automation@${PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID}.iam.gserviceaccount.com"
-            echo "WORKLOAD_IDENTITY_PROVIDER=projects/865738624352/locations/global/workloadIdentityPools/github-d8bck/providers/github-d8bck"
-          } >> "${GITHUB_OUTPUT}"
       - name: Authenticate With GCP
         id: gcp-auth
         uses: google-github-actions/auth@fc2174804b84f912b1f6d334e9463f484f1c552d
         with:
           token_format: "access_token"
-          project_id: ${{ steps.globals.outputs.PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID }}
-          service_account: ${{ steps.globals.outputs.PUBLISHING_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ steps.globals.outputs.WORKLOAD_IDENTITY_PROVIDER }}
+          project_id: ${{ env.PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID }}
+          service_account: ${{ env.PUBLISHING_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
       - name: Authenticate With Internal Repository
         uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef
         with:
           username: "oauth2accesstoken"
           password: ${{ steps.gcp-auth.outputs.access_token }}
-          registry: ${{ steps.globals.outputs.BASE_ARTIFACT_REGISTRY_NAME }}
+          registry: ${{ env.BASE_ARTIFACT_REGISTRY_NAME }}
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
       - name: Install crane
@@ -117,7 +110,7 @@ jobs:
       - name: Push Images and Collect Digests
         id: push
         run: |
-          IMAGE="${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}"
+          IMAGE="${{ env.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}"
           DIGESTS=""
           TEMP_TAGS=""
 
@@ -142,7 +135,7 @@ jobs:
         env:
           DOCKER_METADATA_PR_HEAD_SHA: true
         with:
-          images: ${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}
+          images: ${{ env.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}
           tags: |
             type=sha,format=long,prefix=,suffix=
             type=ref,event=pr,prefix=PR-,suffix=-{{sha}},enable={{is_not_default_branch}}
@@ -163,7 +156,7 @@ jobs:
       - name: Cleanup Temp Tags
         if: always()
         run: |
-          IMAGE="${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}"
+          IMAGE="${{ env.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}"
           for TAG in ${{ steps.push.outputs.temp_tags }}; do
             echo "Deleting temp tag: ${IMAGE}:${TAG}"
             gcloud artifacts docker tags delete "${IMAGE}:${TAG}" --quiet 2>/dev/null || true
