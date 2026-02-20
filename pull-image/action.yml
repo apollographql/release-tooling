@@ -25,6 +25,25 @@ outputs:
 runs:
   using: composite
   steps:
+    # Annoyingly there's no global 'env' block available in composite actions and as such we have to use this
+    # workaround. If there's any other environment variables we need, we should update this block.
+    #
+    # See: https://github.com/orgs/community/discussions/51280 for more details
+    - name: "Setup Workflow Variables"
+      id: globals
+      shell: bash
+      run: |
+        BASE_ARTIFACT_REGISTRY_NAME=us-central1-docker.pkg.dev
+        PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID=platform-mgmt-service-e0izz
+
+        echo "APOLLO_ARTIFACT_REGISTRY=${BASE_ARTIFACT_REGISTRY_NAME}/platform-cross-environment/platform-docker" >> "${GITHUB_OUTPUT}"
+        echo "BASE_ARTIFACT_REGISTRY_NAME=${BASE_ARTIFACT_REGISTRY_NAME}" >> "${GITHUB_OUTPUT}"
+
+        # This project/service account are provisioned in apollo-terraform. In the longer term we should move
+        # this to somewhere we control, but that should be in line with us owning an internal publishing repository
+        echo "PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID=${PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID}" >> "${GITHUB_OUTPUT}"
+        echo "PUBLISHING_SERVICE_ACCOUNT_NAME=release-tooling-automation@${PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID}.iam.gserviceaccount.com" >> "${GITHUB_OUTPUT}"
+        echo "WORKLOAD_IDENTITY_PROVIDER=projects/865738624352/locations/global/workloadIdentityPools/github-d8bck/providers/github-d8bck" >> "${GITHUB_OUTPUT}"
     - name: Authenticate With GCP
       id: gcp-auth
       uses: 'google-github-actions/auth@fc2174804b84f912b1f6d334e9463f484f1c552d'
