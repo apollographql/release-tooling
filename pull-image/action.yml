@@ -12,7 +12,7 @@ inputs:
     default: linux/amd64
 outputs:
   image_reference:
-    value: ${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}:${{ inputs.commit_sha }}
+    value: ${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}:${{ inputs.tag }}
     description: The full image reference that has been pulled (i.e. apollo/my-image:012abcf)
   image_name:
     value: ${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}
@@ -62,5 +62,5 @@ runs:
     - name: Pull Docker Image
       id: docker-pull
       run: |
-        docker pull --platform ${{ inputs.platform }} ${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}:${{ inputs.commit_sha }}
+        docker pull --platform ${{ inputs.platform }} ${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}:${{ inputs.tag }}
       shell: bash
