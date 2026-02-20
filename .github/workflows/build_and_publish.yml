@@ -24,6 +24,11 @@ on:
         description: "The path to the Dockerfile that is to be built"
         required: true
         type: string
+      build_args:
+        description: "Newline-separated list of build args to pass to docker build"
+        required: false
+        type: string
+        default: ""
 
 jobs:
   build:
@@ -49,6 +54,7 @@ jobs:
           context: ${{ inputs.context }}
           file: ${{ inputs.dockerfile_location }}
           platforms: ${{ matrix.platform }}
+          build-args: ${{ inputs.build_args }}
           push: false
           outputs: type=docker,dest=${{ runner.temp }}/${{ inputs.image_name }}.tar
           labels: |
