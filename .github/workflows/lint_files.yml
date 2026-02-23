@@ -16,3 +16,11 @@ jobs:
         uses: actions/checkout@v4
       - name: Check final newline
         uses: qwrtln/check-final-newline@6dad6072a550df84ee0587219a2a4e3fabf84c9c
+  actionlint:
+    runs-on: ubuntu-latest
+    name: Lint GitHub Actions workflows
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Run actionlint
+        uses: raven-actions/actionlint@e01d1ea33dd6a5ed517d95b4c0c357560ac6f518
