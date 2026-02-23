@@ -70,6 +70,7 @@ runs:
           -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
           -w "${GITHUB_WORKSPACE}" \
           -e APOLLO_KEY=dummy_key_for_validation \
+          -e GITHUB_TOKEN=dummy_key_for_validation \
           "${RTF_IMAGE}" \
           /toolbox/scripts/validate-test-plans.sh \
           "${{ inputs.directories }}" \
