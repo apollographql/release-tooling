@@ -63,5 +63,5 @@ runs:
     - name: "Retag and push image to DockerHub"
       run: |
         NEW_TAG=apollograph/${{ inputs.image_name }}:${{ inputs.version_number }}
-        docker buildx imagetools create -t $NEW_TAG ${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}:${{ inputs.commit_sha }}
+        docker buildx imagetools create -t $NEW_TAG -t apollograph/${{ inputs.image_name }}:latest ${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}:${{ inputs.commit_sha }}
       shell: bash
