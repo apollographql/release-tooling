@@ -29,6 +29,11 @@ on:
         required: false
         type: string
         default: ""
+      secrets:
+        description: "A list of secrets to pass through to the Docker builder"
+        type: string
+        required: false
+        default: ""
 
 jobs:
   build:
@@ -55,6 +60,7 @@ jobs:
           file: ${{ inputs.dockerfile_location }}
           platforms: ${{ matrix.platform }}
           build-args: ${{ inputs.build_args }}
+          secrets: ${{ inputs.secrets }}
           push: false
           outputs: type=docker,dest=${{ runner.temp }}/${{ inputs.image_name }}.tar
           labels: |
