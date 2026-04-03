@@ -30,7 +30,7 @@ on:
         type: string
         default: ""
       buildkit_cache_key:
-        description: "Cache key prefix for buildkit-cache-dance (e.g. 'cargo-cache'). Platform slug and a hash of buildkit_cache_hash_files are appended automatically. Required if buildkit_cache_map is set."
+        description: "Cache key prefix for buildkit-cache-dance (e.g. 'cargo-cache'). Platform slug and a hash of buildkit_cache_hash_files are appended automatically. Required if buildkit_cache_hash_files is set."
         type: string
         required: false
         default: ""
