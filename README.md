@@ -5,4 +5,4 @@ credentials and access that can only be obtained within Apollo GraphQL._
 # Apollo Release Tooling
 
 In the longer term documentation will move to this repository. However, for now the documentation exists as a series of 
-Runbooks that can be found [here](https://apollographql.atlassian.net/wiki/spaces/RUNTIMEREADINESS/folder/2139193384?atlOrigin=eyJpIjoiNmJkOGE4ZGJiYzZkNGQwN2FiZjY4NWJmODQ0ZDlkYTkiLCJwIjoiYyJ9)
+Runbooks that can be found [here](https://apollographql.atlassian.net/wiki/spaces/RUNTIMEREADINESS/folder/2298347575)
