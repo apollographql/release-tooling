@@ -15,6 +15,9 @@ inputs:
     description: "GitHub token for accessing private repositories"
   apollo_sudo:
     description: "Enable Apollo sudo mode for elevated GraphOS permissions"
+  rtf_toolbox_tag:
+    description: "Tag for the rtf-toolbox Docker image"
+    default: "edge"
 outputs: {}
 
 runs:
@@ -60,7 +63,7 @@ runs:
     - name: Run Test Plan
       shell: bash
       env:
-        RTF_IMAGE: ${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/rtf-toolbox:edge
+        RTF_IMAGE: ${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/rtf-toolbox:${{ inputs.rtf_toolbox_tag }}
       run: |
         docker pull "${RTF_IMAGE}"
 
