@@ -57,7 +57,7 @@ runs:
         echo "VM_NAME=rtf-gha-${GITHUB_RUN_ID}" >> "${GITHUB_OUTPUT}"
 
         # RTF toolbox image location
-        echo "RTF_IMAGE=us-central1-docker.pkg.dev/platform-cross-environment/platform-docker/rtf-toolbox:edge" >> "${GITHUB_OUTPUT}"
+        echo "RTF_IMAGE=us-central1-docker.pkg.dev/platform-cross-environment/apollo-private-docker/rtf-toolbox:edge" >> "${GITHUB_OUTPUT}"
 
     # Single GCP authentication using rtf-morgue-github-actions service account
     - name: "Authenticate With GCP"

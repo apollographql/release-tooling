@@ -112,7 +112,7 @@ jobs:
       id-token: write
     env:
       BASE_ARTIFACT_REGISTRY_NAME: us-central1-docker.pkg.dev
-      APOLLO_ARTIFACT_REGISTRY: us-central1-docker.pkg.dev/platform-cross-environment/platform-docker
+      APOLLO_ARTIFACT_REGISTRY: us-central1-docker.pkg.dev/platform-cross-environment/apollo-private-docker
       PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID: platform-mgmt-service-e0izz
       PUBLISHING_SERVICE_ACCOUNT_NAME: release-tooling-automation@platform-mgmt-service-e0izz.iam.gserviceaccount.com
       WORKLOAD_IDENTITY_PROVIDER: projects/865738624352/locations/global/workloadIdentityPools/github-d8bck/providers/github-d8bck

@@ -31,7 +31,7 @@ runs:
         BASE_ARTIFACT_REGISTRY_NAME=us-central1-docker.pkg.dev
         PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID=platform-mgmt-service-e0izz
 
-        echo "APOLLO_ARTIFACT_REGISTRY=${BASE_ARTIFACT_REGISTRY_NAME}/platform-cross-environment/platform-docker" >> "${GITHUB_OUTPUT}"
+        echo "APOLLO_ARTIFACT_REGISTRY=${BASE_ARTIFACT_REGISTRY_NAME}/platform-cross-environment/apollo-private-docker" >> "${GITHUB_OUTPUT}"
         echo "BASE_ARTIFACT_REGISTRY_NAME=${BASE_ARTIFACT_REGISTRY_NAME}" >> "${GITHUB_OUTPUT}"
 
         # This project/service account are provisioned in apollo-terraform. In the longer term we should move
