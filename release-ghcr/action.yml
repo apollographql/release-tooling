@@ -10,6 +10,9 @@ inputs:
   version_number:
     description: "The version number that is to be used for the release"
     required: true
+  github_token:
+    description: "GitHub token used to authenticate with GHCR (pass secrets.GITHUB_TOKEN from the calling workflow)"
+    required: true
 outputs: {}
 
 runs:
@@ -54,7 +57,7 @@ runs:
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+        password: ${{ inputs.github_token }}
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
     - name: "Ensure correct name"
