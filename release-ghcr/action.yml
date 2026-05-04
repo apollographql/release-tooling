@@ -58,8 +58,6 @@ runs:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ inputs.github_token }}
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
     - name: "Ensure correct name"
       id: ensure-correct-name
       run: |
@@ -75,3 +73,12 @@ runs:
         NEW_TAG=${{ steps.ensure-correct-name.outputs.CORRECTED_IMAGE_NAME }}:${{ inputs.version_number }}
         docker buildx imagetools create -t $NEW_TAG ${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}:${{ inputs.commit_sha }}
       shell: bash
+    # Drop credentials before returning control to the caller. Otherwise
+    # a push-scoped DockerHub token would still be loaded for any subsequent
+    # docker invocations in the same job.
+    - name: "Log out of registries"
+      if: always()
+      shell: bash
+      run: |
+        docker logout ${{ steps.globals.outputs.BASE_ARTIFACT_REGISTRY_NAME }} || true
+        docker logout ghcr.io || true

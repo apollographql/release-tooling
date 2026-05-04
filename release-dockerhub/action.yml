@@ -73,3 +73,12 @@ runs:
         fi
         docker buildx imagetools create "${args[@]}" ${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}:${{ inputs.commit_sha }}
       shell: bash
+    # Drop credentials before returning control to the caller. Otherwise
+    # a push-scoped DockerHub token would still be loaded for any subsequent
+    # docker invocations in the same job.
+    - name: "Log out of registries"
+      if: always()
+      shell: bash
+      run: |
+        docker logout ${{ steps.globals.outputs.BASE_ARTIFACT_REGISTRY_NAME }} || true
+        docker logout || true
