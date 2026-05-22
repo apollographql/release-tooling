@@ -42,6 +42,7 @@ runs:
         project_id: "${{ steps.globals.outputs.PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID }}"
         service_account: "${{ steps.globals.outputs.PUBLISHING_SERVICE_ACCOUNT_NAME }}"
         workload_identity_provider: "${{ steps.globals.outputs.WORKLOAD_IDENTITY_PROVIDER }}"
+        export_environment_variables: true
 
     - name: Authenticate With Internal Repository
       id: docker-auth
@@ -73,5 +74,6 @@ runs:
           -v /var/run/docker.sock:/var/run/docker.sock \
           -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
           -w "${GITHUB_WORKSPACE}" \
+          -e "GOOGLE_APPLICATION_CREDENTIALS=$GOOGLE_APPLICATION_CREDENTIALS" \
           "${RTF_IMAGE}" \
           rtf rep ci-run "${{ inputs.test_plan_path }}" "${RTF_ARGS[@]}"
