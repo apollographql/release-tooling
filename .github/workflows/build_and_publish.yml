@@ -99,7 +99,7 @@ jobs:
       - name: Upload Image Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: image-${{ steps.slug.outputs.platform }}
+          name: image-${{ inputs.image_name }}-${{ steps.slug.outputs.platform }}
           path: ${{ runner.temp }}/${{ inputs.image_name }}.tar
           retention-days: 1
 
@@ -138,7 +138,7 @@ jobs:
       - name: Download All Image Artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: image-*
+          pattern: image-${{ inputs.image_name }}-*
           path: ${{ runner.temp }}/artifacts
       - name: Push Images and Collect Digests
         id: push
@@ -147,8 +147,8 @@ jobs:
           DIGESTS=""
           TEMP_TAGS=""
 
-          for dir in ${{ runner.temp }}/artifacts/image-*; do
-            PLATFORM_SLUG=$(basename "$dir" | sed 's/^image-//')
+          for dir in ${{ runner.temp }}/artifacts/image-${{ inputs.image_name }}-*; do
+            PLATFORM_SLUG=$(basename "$dir" | sed 's/^image-${{ inputs.image_name }}-//')
             TAR="${dir}/${{ inputs.image_name }}.tar"
             TEMP_TAG="_temp-${GITHUB_SHA}-${PLATFORM_SLUG}"
 
