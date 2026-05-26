@@ -8,13 +8,22 @@ inputs:
     description: "The commit SHA of the image to re-publish"
     required: true
   version_number:
-    description: "The version number that is to be used for the release"
-    required: true
+    description: "Primary version tag to apply. Either this or `tags` must be provided."
+    required: false
+    default: ""
   tag_latest:
-    description: "Whether to also tag the image as :latest. Defaults to 'true' for backwards compatibility; set to 'false' for prereleases so :latest keeps pointing at the most recent stable."
+    description: "When `version_number` is set, also apply the :latest tag. Ignored when only `tags` is set. Defaults to 'true' for backwards compatibility; set to 'false' for prereleases so :latest keeps pointing at the most recent stable."
     required: false
     default: "true"
-outputs: {}
+  tags:
+    description: |
+      Newline-separated list of tag patterns in `docker/metadata-action` syntax (e.g. `type=raw,value=...`, `type=semver,pattern=...`). When set, these are added to whatever `version_number`/`tag_latest` produce; if both are empty the action fails. See https://github.com/docker/metadata-action for syntax.
+    required: false
+    default: ""
+outputs:
+  digest:
+    description: "The manifest digest (sha256:...) of the published image. All applied tags point at this manifest."
+    value: ${{ steps.publish.outputs.digest }}
 
 runs:
   using: composite
@@ -64,15 +73,36 @@ runs:
       with:
         username: 'apollograph'
         password: '${{ steps.fetch-dockerhub-credential.outputs.token }}'
+    - name: "Resolve tags"
+      id: meta
+      uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051
+      with:
+        images: "apollograph/${{ inputs.image_name }}"
+        tags: |
+          ${{ inputs.version_number != '' && format('type=raw,value={0}', inputs.version_number) || '' }}
+          ${{ (inputs.version_number != '' && inputs.tag_latest == 'true') && 'type=raw,value=latest' || '' }}
+          ${{ inputs.tags }}
     - name: "Retag and push image to DockerHub"
-      run: |
-        NEW_TAG=apollograph/${{ inputs.image_name }}:${{ inputs.version_number }}
-        args=( -t "$NEW_TAG" )
-        if [[ "${{ inputs.tag_latest }}" == "true" ]]; then
-          args+=( -t "apollograph/${{ inputs.image_name }}:latest" )
-        fi
-        docker buildx imagetools create "${args[@]}" ${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}:${{ inputs.commit_sha }}
+      id: publish
       shell: bash
+      env:
+        META_TAGS: ${{ steps.meta.outputs.tags }}
+      run: |
+        args=()
+        while IFS= read -r tag; do
+          [[ -z "$tag" ]] && continue
+          args+=( -t "$tag" )
+        done <<< "$META_TAGS"
+        if [[ ${#args[@]} -eq 0 ]]; then
+          echo "::error::No tags resolved. Provide version_number, tags, or both." >&2
+          exit 1
+        fi
+        SOURCE="${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}:${{ inputs.commit_sha }}"
+        docker buildx imagetools create "${args[@]}" "$SOURCE"
+        # All applied tags point at the same manifest; inspect the first to get its digest.
+        FIRST_TAG="${args[1]}"
+        DIGEST=$(docker buildx imagetools inspect "$FIRST_TAG" --format '{{.Manifest.Digest}}')
+        echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
     # Drop credentials before returning control to the caller. Otherwise
     # a push-scoped DockerHub token would still be loaded for any subsequent
     # docker invocations in the same job.
