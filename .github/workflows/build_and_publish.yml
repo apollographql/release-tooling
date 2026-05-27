@@ -99,7 +99,11 @@ jobs:
       - name: Upload Image Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: image-${{ inputs.image_name }}-${{ steps.slug.outputs.platform }}
+          # Double-dash separates image_name from platform slug because `--`
+          # is not a valid sequence in a Docker image name, so the manifest
+          # job's glob can't prefix-match a longer image name (e.g. building
+          # both `foo` and `foo-bar` in the same parent workflow).
+          name: image-${{ inputs.image_name }}--${{ steps.slug.outputs.platform }}
           path: ${{ runner.temp }}/${{ inputs.image_name }}.tar
           retention-days: 1
 
@@ -138,7 +142,7 @@ jobs:
       - name: Download All Image Artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: image-${{ inputs.image_name }}-*
+          pattern: image-${{ inputs.image_name }}--*
           path: ${{ runner.temp }}/artifacts
       - name: Push Images and Collect Digests
         id: push
@@ -147,8 +151,8 @@ jobs:
           DIGESTS=""
           TEMP_TAGS=""
 
-          for dir in ${{ runner.temp }}/artifacts/image-${{ inputs.image_name }}-*; do
-            PLATFORM_SLUG=$(basename "$dir" | sed 's/^image-${{ inputs.image_name }}-//')
+          for dir in ${{ runner.temp }}/artifacts/image-${{ inputs.image_name }}--*; do
+            PLATFORM_SLUG=$(basename "$dir" | sed 's/^image-${{ inputs.image_name }}--//')
             TAR="${dir}/${{ inputs.image_name }}.tar"
             TEMP_TAG="_temp-${GITHUB_SHA}-${PLATFORM_SLUG}"
 
