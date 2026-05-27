@@ -8,12 +8,21 @@ inputs:
     description: "The commit SHA of the image to re-publish"
     required: true
   version_number:
-    description: "The version number that is to be used for the release"
-    required: true
+    description: "Primary version tag to apply. Either this or `tags` must be provided."
+    required: false
+    default: ""
+  tags:
+    description: |
+      Newline-separated list of tag patterns in `docker/metadata-action` syntax (e.g. `type=raw,value=...`, `type=semver,pattern=...`). When set, these are added to whatever `version_number` produces; if both are empty the action fails. See https://github.com/docker/metadata-action for syntax.
+    required: false
+    default: ""
   github_token:
     description: "GitHub token used to authenticate with GHCR (pass secrets.GITHUB_TOKEN from the calling workflow)"
     required: true
-outputs: {}
+outputs:
+  digest:
+    description: "The manifest digest (sha256:...) of the published image. All applied tags point at this manifest."
+    value: ${{ steps.publish.outputs.digest }}
 
 runs:
   using: composite
@@ -68,11 +77,34 @@ runs:
           echo "CORRECTED_IMAGE_NAME=ghcr.io/${{ github.repository }}/${{ inputs.image_name }}" >> "${GITHUB_OUTPUT}"
         fi
       shell: bash
+    - name: "Resolve tags"
+      id: meta
+      uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051
+      with:
+        images: ${{ steps.ensure-correct-name.outputs.CORRECTED_IMAGE_NAME }}
+        tags: |
+          ${{ inputs.version_number != '' && format('type=raw,value={0}', inputs.version_number) || '' }}
+          ${{ inputs.tags }}
     - name: "Retag and push image to GHCR"
-      run: |
-        NEW_TAG=${{ steps.ensure-correct-name.outputs.CORRECTED_IMAGE_NAME }}:${{ inputs.version_number }}
-        docker buildx imagetools create -t $NEW_TAG ${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}:${{ inputs.commit_sha }}
+      id: publish
       shell: bash
+      env:
+        META_TAGS: ${{ steps.meta.outputs.tags }}
+      run: |
+        args=()
+        while IFS= read -r tag; do
+          [[ -z "$tag" ]] && continue
+          args+=( -t "$tag" )
+        done <<< "$META_TAGS"
+        if [[ ${#args[@]} -eq 0 ]]; then
+          echo "::error::No tags resolved. Provide version_number, tags, or both." >&2
+          exit 1
+        fi
+        SOURCE="${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}:${{ inputs.commit_sha }}"
+        docker buildx imagetools create "${args[@]}" "$SOURCE"
+        FIRST_TAG="${args[1]}"
+        DIGEST=$(docker buildx imagetools inspect "$FIRST_TAG" --format '{{.Manifest.Digest}}')
+        echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
     # Drop credentials before returning control to the caller. Otherwise
     # a push-scoped DockerHub token would still be loaded for any subsequent
     # docker invocations in the same job.
