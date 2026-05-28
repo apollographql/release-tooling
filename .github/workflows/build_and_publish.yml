@@ -39,6 +39,11 @@ on:
         type: string
         required: false
         default: ""
+      additional_tags:
+        description: "Newline-separated extra entries appended to docker/metadata-action's `tags:` list (e.g. `type=raw,value=0.0.0_{{sha}},enable={{is_default_branch}}`)."
+        type: string
+        required: false
+        default: ""
     secrets:
       docker_build_secrets:
         description: "A list of secrets to pass through to the Docker builder (e.g. 'registry_token=secret_value')"
@@ -178,6 +183,7 @@ jobs:
             type=ref,event=pr,prefix=PR-,suffix=-{{sha}},enable={{is_not_default_branch}}
             type=ref,event=branch,suffix=-{{sha}},enable={{is_default_branch}}
             type=raw,value=edge,enable={{is_default_branch}}
+            ${{ inputs.additional_tags }}
       - name: Create Multi-Arch Manifest
         run: |
           TAGS=""
