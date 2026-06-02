@@ -34,14 +34,29 @@ runs:
         echo "PUBLISHING_SERVICE_ACCOUNT_NAME=release-tooling-automation@${PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID}.iam.gserviceaccount.com" >> "${GITHUB_OUTPUT}"
         echo "WORKLOAD_IDENTITY_PROVIDER=projects/865738624352/locations/global/workloadIdentityPools/github-d8bck/providers/github-d8bck" >> "${GITHUB_OUTPUT}"
 
+        # RTF project WIF — used to produce external_account credentials that the RTF CLI
+        # exchanges for an IAM-signed JWT to authenticate with the IAP-protected orchestrator
+        echo "RTF_WORKLOAD_IDENTITY_PROVIDER=projects/230145797925/locations/global/workloadIdentityPools/github-actions/providers/apollographql" >> "${GITHUB_OUTPUT}"
+        echo "RTF_SERVICE_ACCOUNT=rtf-morgue-github-actions@runtime-testing-framework.iam.gserviceaccount.com" >> "${GITHUB_OUTPUT}"
+
     - name: Authenticate With GCP
       id: gcp-auth
       uses: "google-github-actions/auth@fc2174804b84f912b1f6d334e9463f484f1c552d"
       with:
+        create_credentials_file: false
         token_format: "access_token"
         project_id: "${{ steps.globals.outputs.PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID }}"
         service_account: "${{ steps.globals.outputs.PUBLISHING_SERVICE_ACCOUNT_NAME }}"
         workload_identity_provider: "${{ steps.globals.outputs.WORKLOAD_IDENTITY_PROVIDER }}"
+
+    - name: Authenticate With RTF GCP Project
+      id: rtf-gcp-auth
+      uses: "google-github-actions/auth@fc2174804b84f912b1f6d334e9463f484f1c552d"
+      with:
+        create_credentials_file: true
+        project_id: "runtime-testing-framework"
+        service_account: "${{ steps.globals.outputs.RTF_SERVICE_ACCOUNT }}"
+        workload_identity_provider: "${{ steps.globals.outputs.RTF_WORKLOAD_IDENTITY_PROVIDER }}"
 
     - name: Authenticate With Internal Repository
       id: docker-auth
@@ -55,6 +70,7 @@ runs:
       shell: bash
       env:
         RTF_IMAGE: ${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/rtf-toolbox:edge
+        RTF_CREDENTIALS_FILE: ${{ steps.rtf-gcp-auth.outputs.credentials_file_path }}
       run: |
         docker pull "${RTF_IMAGE}"
 
@@ -72,6 +88,8 @@ runs:
         docker run --rm \
           -v /var/run/docker.sock:/var/run/docker.sock \
           -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
+          -v "${RTF_CREDENTIALS_FILE}:${RTF_CREDENTIALS_FILE}" \
+          -e GOOGLE_APPLICATION_CREDENTIALS="${RTF_CREDENTIALS_FILE}" \
           -w "${GITHUB_WORKSPACE}" \
           "${RTF_IMAGE}" \
           rtf rep ci-run "${{ inputs.test_plan_path }}" "${RTF_ARGS[@]}"
