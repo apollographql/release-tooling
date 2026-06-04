@@ -1,0 +1,125 @@
+name: "Release Helm Chart to DockerHub"
+description: "Package a Helm chart from source and publish it to Apollo's public DockerHub OCI registry"
+inputs:
+  chart_path:
+    description: "Path to the directory containing the chart's Chart.yaml"
+    required: true
+  version:
+    description: "Chart version (the OCI tag) to publish. Must be valid semver."
+    required: true
+  app_version:
+    description: "Optional value for the chart's appVersion (`helm package --app-version`). Left unset if empty."
+    required: false
+    default: ""
+  chart_name:
+    description: |
+      Optional override for the chart `name` in Chart.yaml. Determines the published repo path
+      (oci://registry-1.docker.io/apollograph/<name>). Defaults to the name already in Chart.yaml.
+    required: false
+    default: ""
+  dependency_update:
+    description: "When 'true', run `helm dependency update` before packaging."
+    required: false
+    default: "false"
+outputs:
+  chart_version:
+    description: "The chart version that was published (the OCI tag)."
+    value: ${{ steps.publish.outputs.chart_version }}
+  oci_ref:
+    description: "The full OCI reference the chart was published to (registry/name:version)."
+    value: ${{ steps.publish.outputs.oci_ref }}
+
+runs:
+  using: composite
+  steps:
+    # Annoyingly there's no global 'env' block available in composite actions and as such we have to use this
+    # workaround. If there's any other environment variables we need, we should update this block.
+    #
+    # See: https://github.com/orgs/community/discussions/51280 for more details
+    - name: "Setup Workflow Variables"
+      id: globals
+      shell: bash
+      run: |
+        DOCKERHUB_REGISTRY_HOST=registry-1.docker.io
+        PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID=platform-mgmt-service-e0izz
+
+        echo "APOLLO_HELM_REGISTRY=oci://${DOCKERHUB_REGISTRY_HOST}/apollograph" >> "${GITHUB_OUTPUT}"
+        echo "DOCKERHUB_REGISTRY_HOST=${DOCKERHUB_REGISTRY_HOST}" >> "${GITHUB_OUTPUT}"
+
+        # This project/service account are provisioned in apollo-terraform. In the longer term we should move
+        # this to somewhere we control, but that should be in line with us owning an internal publishing repository
+        echo "PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID=${PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID}" >> "${GITHUB_OUTPUT}"
+        echo "PUBLISHING_SERVICE_ACCOUNT_NAME=release-tooling-automation@${PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID}.iam.gserviceaccount.com" >> "${GITHUB_OUTPUT}"
+        echo "WORKLOAD_IDENTITY_PROVIDER=projects/865738624352/locations/global/workloadIdentityPools/github-d8bck/providers/github-d8bck" >> "${GITHUB_OUTPUT}"
+    - name: Authenticate With GCP
+      id: gcp-auth
+      uses: 'google-github-actions/auth@fc2174804b84f912b1f6d334e9463f484f1c552d'
+      with:
+        token_format: 'access_token'
+        project_id: "${{ steps.globals.outputs.PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID }}"
+        service_account: "${{ steps.globals.outputs.PUBLISHING_SERVICE_ACCOUNT_NAME }}"
+        workload_identity_provider: "${{ steps.globals.outputs.WORKLOAD_IDENTITY_PROVIDER }}"
+    - name: Fetch DockerHub Credential
+      id: fetch-dockerhub-credential
+      uses: google-github-actions/get-secretmanager-secrets@50ec04d56ddf2740b0bde82926cc742f90e06d2b
+      with:
+        secrets: |-
+          token:platform-prod-service-q8dyj/docker_hub_push_token
+    - name: Authenticate With DockerHub Helm Registry
+      shell: bash
+      run: |
+        echo "${{ steps.fetch-dockerhub-credential.outputs.token }}" | \
+          helm registry login "${{ steps.globals.outputs.DOCKERHUB_REGISTRY_HOST }}" \
+            --username apollograph --password-stdin
+    - name: "Package and push Helm chart"
+      id: publish
+      shell: bash
+      env:
+        CHART_PATH: ${{ inputs.chart_path }}
+        VERSION: ${{ inputs.version }}
+        APP_VERSION: ${{ inputs.app_version }}
+        CHART_NAME: ${{ inputs.chart_name }}
+        DEPENDENCY_UPDATE: ${{ inputs.dependency_update }}
+        HELM_REGISTRY: ${{ steps.globals.outputs.APOLLO_HELM_REGISTRY }}
+      run: |
+        set -euo pipefail
+
+        if [[ ! -f "${CHART_PATH}/Chart.yaml" ]]; then
+          echo "::error::No Chart.yaml found at ${CHART_PATH}" >&2
+          exit 1
+        fi
+
+        if [[ -z "${VERSION}" ]]; then
+          echo "::error::version is required" >&2
+          exit 1
+        fi
+
+        # Optionally override the chart name; this becomes the published repo path.
+        if [[ -n "${CHART_NAME}" ]]; then
+          CHART_NAME="${CHART_NAME}" yq -i '.name = strenv(CHART_NAME)' "${CHART_PATH}/Chart.yaml"
+        fi
+
+        if [[ "${DEPENDENCY_UPDATE}" == "true" ]]; then
+          helm dependency update "${CHART_PATH}"
+        fi
+
+        PACKAGE_ARGS=( "${CHART_PATH}" --version "${VERSION}" )
+        if [[ -n "${APP_VERSION}" ]]; then
+          PACKAGE_ARGS+=( --app-version "${APP_VERSION}" )
+        fi
+
+        PKG_DIR="$(mktemp -d)"
+        helm package "${PACKAGE_ARGS[@]}" --destination "${PKG_DIR}"
+        CHART_TGZ="$(ls "${PKG_DIR}"/*.tgz)"
+
+        helm push "${CHART_TGZ}" "${HELM_REGISTRY}"
+
+        NAME="$(yq '.name' "${CHART_PATH}/Chart.yaml")"
+        echo "chart_version=${VERSION}" >> "${GITHUB_OUTPUT}"
+        echo "oci_ref=${HELM_REGISTRY}/${NAME}:${VERSION}" >> "${GITHUB_OUTPUT}"
+    # Drop credentials before returning control to the caller so a push-scoped
+    # token isn't left loaded for any subsequent helm/docker invocations.
+    - name: "Log out of registries"
+      if: always()
+      shell: bash
+      run: helm registry logout "${{ steps.globals.outputs.DOCKERHUB_REGISTRY_HOST }}" || true
