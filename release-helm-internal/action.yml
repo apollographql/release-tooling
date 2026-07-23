@@ -5,9 +5,14 @@ inputs:
     description: "Path to the directory containing the chart's Chart.yaml"
     required: true
   commit_sha:
-    description: "The commit SHA the chart is built from. Used to derive the default version."
+    description: |
+      The commit SHA the chart is built from. Used to derive the default version.
+      Defaults to the PR's head commit on `pull_request` events - bare `github.sha`
+      there is the ephemeral merge commit GitHub creates for the run, not the commit
+      any paired image was actually built from (see `DOCKER_METADATA_PR_HEAD_SHA` in
+      `build_and_publish.yml`, which corrects for the same thing on the image side).
     required: false
-    default: ${{ github.sha }}
+    default: ${{ github.event.pull_request.head.sha || github.sha }}
   version:
     description: |
       Chart version (the OCI tag) to publish. Must be valid semver. Defaults to `0.0.0+<commit_sha>`,
