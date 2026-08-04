@@ -92,4 +92,4 @@ runs:
           -e GOOGLE_APPLICATION_CREDENTIALS="${RTF_CREDENTIALS_FILE}" \
           -w "${GITHUB_WORKSPACE}" \
           "${RTF_IMAGE}" \
-          rtf rep ci-run "${{ inputs.test_plan_path }}" "${RTF_ARGS[@]}"
+          rtf remote ci-run "${{ inputs.test_plan_path }}" "${RTF_ARGS[@]}"
