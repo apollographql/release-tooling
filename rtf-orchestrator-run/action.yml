@@ -35,9 +35,11 @@ runs:
         echo "WORKLOAD_IDENTITY_PROVIDER=projects/865738624352/locations/global/workloadIdentityPools/github-d8bck/providers/github-d8bck" >> "${GITHUB_OUTPUT}"
 
         # RTF project WIF — used to produce external_account credentials that the RTF CLI
-        # exchanges for an IAM-signed JWT to authenticate with the IAP-protected orchestrator
+        # exchanges for an IAM-signed JWT to authenticate with the IAP-protected orchestrator.
+        # release-tooling-rtf is scoped specifically to this action (WIF trust follows
+        # apollo-terraform's release-tooling enrolled_repos list).
         echo "RTF_WORKLOAD_IDENTITY_PROVIDER=projects/230145797925/locations/global/workloadIdentityPools/github-actions/providers/apollographql" >> "${GITHUB_OUTPUT}"
-        echo "RTF_SERVICE_ACCOUNT=rtf-morgue-github-actions@runtime-testing-framework.iam.gserviceaccount.com" >> "${GITHUB_OUTPUT}"
+        echo "RTF_SERVICE_ACCOUNT=release-tooling-rtf@runtime-testing-framework.iam.gserviceaccount.com" >> "${GITHUB_OUTPUT}"
 
     - name: Authenticate With GCP
       id: gcp-auth
