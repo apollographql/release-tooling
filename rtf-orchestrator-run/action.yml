@@ -68,11 +68,34 @@ runs:
         password: "${{ steps.gcp-auth.outputs.access_token }}"
         registry: "${{ steps.globals.outputs.BASE_ARTIFACT_REGISTRY_NAME }}"
 
+    # Test plans commonly reference other repos (e.g. `kind: github` file/scenario providers
+    # pulling shared config from apollographql/rtf-morgue), which the rtf CLI resolves itself
+    # before it ever talks to the Orchestrator. That resolution needs its own GitHub client, so
+    # we mint a short-lived installation token from a GitHub App key dedicated to this action -
+    # separate from the App ArgoCD and the orchestrator server share - rather than requiring
+    # every caller of this action to supply a GITHUB_TOKEN of their own.
+    - name: Fetch GitHub App Credentials
+      id: github-app-secrets
+      uses: "google-github-actions/get-secretmanager-secrets@50ec04d56ddf2740b0bde82926cc742f90e06d2b"
+      with:
+        secrets: |-
+          app_id:runtime-testing-framework/github-app-id
+          private_key:runtime-testing-framework/github-app-private-key
+
+    - name: Mint GitHub App Installation Token
+      id: github-app-token
+      uses: "actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1"
+      with:
+        app-id: "${{ steps.github-app-secrets.outputs.app_id }}"
+        private-key: "${{ steps.github-app-secrets.outputs.private_key }}"
+        owner: "${{ github.repository_owner }}"
+
     - name: Run Test Plan
       shell: bash
       env:
         RTF_IMAGE: ${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/rtf-toolbox:edge
         RTF_CREDENTIALS_FILE: ${{ steps.rtf-gcp-auth.outputs.credentials_file_path }}
+        GITHUB_APP_TOKEN: ${{ steps.github-app-token.outputs.token }}
       run: |
         docker pull "${RTF_IMAGE}"
 
@@ -92,6 +115,7 @@ runs:
           -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
           -v "${RTF_CREDENTIALS_FILE}:${RTF_CREDENTIALS_FILE}" \
           -e GOOGLE_APPLICATION_CREDENTIALS="${RTF_CREDENTIALS_FILE}" \
+          -e GITHUB_TOKEN="${GITHUB_APP_TOKEN}" \
           -w "${GITHUB_WORKSPACE}" \
           "${RTF_IMAGE}" \
           rtf remote ci-run "${{ inputs.test_plan_path }}" "${RTF_ARGS[@]}"
