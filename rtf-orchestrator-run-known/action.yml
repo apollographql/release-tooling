@@ -95,26 +95,17 @@ runs:
         RTF_IMAGE: ${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/rtf-toolbox:edge
         RTF_CREDENTIALS_FILE: ${{ steps.rtf-gcp-auth.outputs.credentials_file_path }}
         GITHUB_APP_TOKEN: ${{ steps.github-app-token.outputs.token }}
-        TEST_PLAN_ID: ${{ inputs.test_plan_id }}
-        GIT_REF: ${{ inputs.git_ref }}
-        VARS_FILE: ${{ inputs.vars_file }}
       run: |
         docker pull "${RTF_IMAGE}"
 
-        JQ_ARGS=(--arg test_plan_uuid "${TEST_PLAN_ID}")
-        JQ_FILTER='{test_plan_uuid: $test_plan_uuid}'
-
-        if [[ -n "${GIT_REF}" ]]; then
-          JQ_ARGS+=(--arg ref "${GIT_REF}")
-          JQ_FILTER+=' + {ref: $ref}'
+        # Build rtf arguments conditionally
+        RTF_ARGS=()
+        if [[ -n "${{ inputs.vars_file }}" ]]; then
+          RTF_ARGS+=("--vars" "${{ inputs.vars_file }}")
         fi
-
-        if [[ -n "${VARS_FILE}" ]]; then
-          JQ_ARGS+=(--argjson variables "$(cat "${VARS_FILE}")")
-          JQ_FILTER+=' + {variables: $variables}'
+        if [[ -n "${{ inputs.git_ref }}" ]]; then
+          RTF_ARGS+=("--ref" "${{ inputs.git_ref }}")
         fi
-
-        BODY=$(jq -n "${JQ_ARGS[@]}" "${JQ_FILTER}")
 
         docker run --rm \
           -v /var/run/docker.sock:/var/run/docker.sock \
@@ -124,4 +115,4 @@ runs:
           -e GITHUB_TOKEN="${GITHUB_APP_TOKEN}" \
           -w "${GITHUB_WORKSPACE}" \
           "${RTF_IMAGE}" \
-          rtf remote request test-run/trigger -X POST --body="${BODY}"
+          rtf remote ci-run-known "${RTF_ARGS[@]}" "${{ inputs.test_plan_id }}"
