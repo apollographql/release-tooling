@@ -55,14 +55,6 @@ on:
         type: string
         required: false
         default: ""
-      smoke_platform:
-        description: >-
-          Platform to smoke, as a docker platform string (e.g. 'linux/amd64').
-          The push_manifest runner is amd64, so a non-amd64 image cannot boot
-          here. Keep the default. Only read when smoke_script is set.
-        type: string
-        required: false
-        default: "linux/amd64"
     secrets:
       docker_build_secrets:
         description: "A list of secrets to pass through to the Docker builder (e.g. 'registry_token=secret_value')"
@@ -151,20 +143,17 @@ jobs:
       # so this smokes the published artifact, not a rebuilt proxy. When
       # smoke_script is empty every step below is skipped and the job is
       # byte-identical to the pre-smoke behavior for all other callers.
-      - name: Compute smoke platform slug
-        id: smoke-slug
-        if: inputs.smoke_script != ''
-        run: echo "platform=${PLATFORM//\//-}" >> "$GITHUB_OUTPUT"
-        env:
-          PLATFORM: ${{ inputs.smoke_platform }}
       - name: Checkout caller code for the smoke script
         if: inputs.smoke_script != ''
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
-      - name: Download the smoke-platform image artifact
+      # The push_manifest runner is amd64, so the smoke boots the amd64 build
+      # artifact. This is fixed, not caller-selectable — a non-amd64 image
+      # cannot boot here anyway. Revisit if this runner ever gains multi-arch.
+      - name: Download the amd64 image artifact for the smoke
         if: inputs.smoke_script != ''
         uses: actions/download-artifact@v4
         with:
-          name: image-${{ inputs.image_name }}--${{ steps.smoke-slug.outputs.platform }}
+          name: image-${{ inputs.image_name }}--linux-amd64
           path: ${{ runner.temp }}/smoke
       - name: Load the image and run the offline-boot smoke
         if: inputs.smoke_script != ''
