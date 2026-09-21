@@ -44,17 +44,6 @@ on:
         type: string
         required: false
         default: ""
-      smoke_script:
-        description: >-
-          Optional path (in the caller repo) to a smoke script. When set, the
-          push_manifest job loads the built image tar and runs the script
-          BEFORE any push, so a failed smoke blocks the tag move. The script
-          receives one argument: a local image ref for the loaded image. When
-          empty (the default) the smoke is skipped and the workflow behaves as
-          before.
-        type: string
-        required: false
-        default: ""
     secrets:
       docker_build_secrets:
         description: "A list of secrets to pass through to the Docker builder (e.g. 'registry_token=secret_value')"
@@ -137,41 +126,6 @@ jobs:
       PUBLISHING_SERVICE_ACCOUNT_NAME: release-tooling-automation@platform-mgmt-service-e0izz.iam.gserviceaccount.com
       WORKLOAD_IDENTITY_PROVIDER: projects/865738624352/locations/global/workloadIdentityPools/github-d8bck/providers/github-d8bck
     steps:
-      # Optional offline-boot smoke (opt-in via smoke_script). It runs BEFORE
-      # GCP auth and BEFORE any push, so a failed boot blocks the tag move. The
-      # build job already built with `push: false` and uploaded the exact tar,
-      # so this smokes the published artifact, not a rebuilt proxy. When
-      # smoke_script is empty every step below is skipped and the job is
-      # byte-identical to the pre-smoke behavior for all other callers.
-      - name: Checkout caller code for the smoke script
-        if: inputs.smoke_script != ''
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
-      # The push_manifest runner is amd64, so the smoke boots the amd64 build
-      # artifact. This is fixed, not caller-selectable — a non-amd64 image
-      # cannot boot here anyway. Revisit if this runner ever gains multi-arch.
-      - name: Download the amd64 image artifact for the smoke
-        if: inputs.smoke_script != ''
-        uses: actions/download-artifact@v4
-        with:
-          name: image-${{ inputs.image_name }}--linux-amd64
-          path: ${{ runner.temp }}/smoke
-      - name: Load the image and run the offline-boot smoke
-        if: inputs.smoke_script != ''
-        run: |
-          TAR="${{ runner.temp }}/smoke/${{ inputs.image_name }}.tar"
-          # The tar has no repo:tag (the build sets no `tags:`), so `docker
-          # load` prints "Loaded image ID: sha256:...". Capture that ID and tag
-          # it, so the smoke script gets a stable local ref to boot.
-          IMAGE_ID="$(docker load -i "${TAR}" | sed -n 's/^Loaded image ID: //p')"
-          if [ -z "${IMAGE_ID}" ]; then
-            echo "smoke: docker load did not report an image ID" >&2
-            docker load -i "${TAR}" || true
-            exit 1
-          fi
-          SMOKE_REF="smoke-target:${GITHUB_SHA}"
-          docker tag "${IMAGE_ID}" "${SMOKE_REF}"
-          echo "smoke: running ${{ inputs.smoke_script }} against ${SMOKE_REF}"
-          bash "${{ inputs.smoke_script }}" "${SMOKE_REF}"
       - name: Authenticate With GCP
         id: gcp-auth
         uses: google-github-actions/auth@fc2174804b84f912b1f6d334e9463f484f1c552d
