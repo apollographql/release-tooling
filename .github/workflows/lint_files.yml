@@ -9,38 +9,56 @@ on:
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
     name: Check if all files end in newline
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Check final newline
         uses: qwrtln/check-final-newline@6dad6072a550df84ee0587219a2a4e3fabf84c9c
+
   actionlint:
-    runs-on: ubuntu-latest
     name: Lint GitHub Actions workflows
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Run actionlint
         uses: raven-actions/actionlint@e01d1ea33dd6a5ed517d95b4c0c357560ac6f518
+
+  ghafmt:
+    name: Run `ghafmt` on all GitHub Actions workflows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: "Run ghafmt"
+        uses: jonathanrainer/ghafmt@070608df18a658ddcc691f000fbf09c7090f0b37 # v0.1.5
+        with:
+          mode: check
+          path: ${{ github.workspace }}
+
   check_split_consistent:
     name: "Check `build_and_publish.yml` is consistent with `build.yml` and `publish.yml`"
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Compare Input Subsets
-        working-directory: .github/scripts
         run: |
           ./compare_subset.sh ../workflows/build_and_publish.yml ../workflows/build.yml .on.workflow_call
           ./compare_subset.sh ../workflows/build_and_publish.yml ../workflows/publish.yml .on.workflow_call
-      - name: Compare Implementations
         working-directory: .github/scripts
+
+      - name: Compare Implementations
         # Below we delete `.needs` keys from what we compare in the combined workflow so that we don't
         # get caught out by keys that could never be in the split workflow. In the case that they
         # get included in the split workflow they'll still be captured
         run: |
           diff <(yq ".jobs.build | del(.needs)" ../workflows/build_and_publish.yml) <(yq ".jobs.build" ../workflows/build.yml)
           diff <(yq ".jobs.publish | del(.needs)" ../workflows/build_and_publish.yml) <(yq ".jobs.publish" ../workflows/publish.yml)
-    
+        working-directory: .github/scripts

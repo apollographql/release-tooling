@@ -1,26 +1,28 @@
 name: "Pull Image"
+
 description: "Pull an existing Docker Image from the internal Apollo repositories"
+
 inputs:
   image_name:
     description: 'The name of the Docker Image that is to be pulled'
     required: true
-  tag:
-    description: "The tag of the image to be pulled (will either be a commit SHA or 'edge')"
-    required: true
   platform:
     description: "The platform to pull the image for (i.e. linux/amd64)"
     default: linux/amd64
-outputs:
-  image_reference:
-    value: ${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}:${{ inputs.tag }}
-    description: The full image reference that has been pulled (i.e. apollo/my-image:012abcf)
-  image_name:
-    value: ${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}
-    description: The full image name that has been pulled (i.e. apollo/my-image)
-  image_tag:
-    value: ${{ inputs.tag }}
-    description: The image tag that has been pulled (i.e. 012abcf)
+  tag:
+    description: "The tag of the image to be pulled (will either be a commit SHA or 'edge')"
+    required: true
 
+outputs:
+  image_name:
+    description: The full image name that has been pulled (i.e. apollo/my-image)
+    value: ${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}
+  image_reference:
+    description: The full image reference that has been pulled (i.e. apollo/my-image:012abcf)
+    value: ${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}:${{ inputs.tag }}
+  image_tag:
+    description: The image tag that has been pulled (i.e. 012abcf)
+    value: ${{ inputs.tag }}
 
 runs:
   using: composite
@@ -31,7 +33,6 @@ runs:
     # See: https://github.com/orgs/community/discussions/51280 for more details
     - name: "Setup Workflow Variables"
       id: globals
-      shell: bash
       run: |
         BASE_ARTIFACT_REGISTRY_NAME=us-central1-docker.pkg.dev
         PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID=platform-mgmt-service-e0izz
@@ -44,23 +45,27 @@ runs:
         echo "PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID=${PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID}" >> "${GITHUB_OUTPUT}"
         echo "PUBLISHING_SERVICE_ACCOUNT_NAME=release-tooling-automation@${PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID}.iam.gserviceaccount.com" >> "${GITHUB_OUTPUT}"
         echo "WORKLOAD_IDENTITY_PROVIDER=projects/865738624352/locations/global/workloadIdentityPools/github-d8bck/providers/github-d8bck" >> "${GITHUB_OUTPUT}"
+      shell: bash
+
     - name: Authenticate With GCP
-      id: gcp-auth
+      id: gcp_auth
       uses: 'google-github-actions/auth@fc2174804b84f912b1f6d334e9463f484f1c552d'
       with:
-        token_format: 'access_token'
         project_id: "${{ steps.globals.outputs.PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID }}"
         service_account: "${{ steps.globals.outputs.PUBLISHING_SERVICE_ACCOUNT_NAME }}"
+        token_format: 'access_token'
         workload_identity_provider: "${{ steps.globals.outputs.WORKLOAD_IDENTITY_PROVIDER }}"
+
     - name: Authenticate With Internal Repository
-      id: docker-auth
+      id: docker_auth
       uses: 'docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef'
       with:
-        username: 'oauth2accesstoken'
-        password: '${{ steps.gcp-auth.outputs.access_token }}'
+        password: ${{ steps.gcp_auth.outputs.access_token }}
         registry: '${{ steps.globals.outputs.BASE_ARTIFACT_REGISTRY_NAME }}'
+        username: 'oauth2accesstoken'
+
     - name: Pull Docker Image
-      id: docker-pull
+      id: docker_pull
       run: |
         docker pull --platform ${{ inputs.platform }} ${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/${{ inputs.image_name }}:${{ inputs.tag }}
       shell: bash
