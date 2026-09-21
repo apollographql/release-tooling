@@ -24,6 +24,15 @@ jobs:
         uses: actions/checkout@v4
       - name: Run actionlint
         uses: raven-actions/actionlint@e01d1ea33dd6a5ed517d95b4c0c357560ac6f518
+  ghafmt:
+    runs-on: ubuntu-latest
+    name: Lint GitHub Actions workflows
+    steps:
+    - name: "Run ghafmt"
+      uses: jonathanrainer/ghafmt@070608df18a658ddcc691f000fbf09c7090f0b37 # v0.1.5
+      with:
+        mode: check
+        path: '.'
   check_split_consistent:
     name: "Check `build_and_publish.yml` is consistent with `build.yml` and `publish.yml`"
     runs-on: ubuntu-22.04
