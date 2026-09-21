@@ -112,7 +112,7 @@ jobs:
           path: ${{ runner.temp }}/${{ inputs.image_name }}.tar
           retention-days: 1
 
-  push_manifest:
+  publish:
     name: "Push ${{ inputs.image_name }} Manifest"
     runs-on: ubuntu-latest
     needs: build

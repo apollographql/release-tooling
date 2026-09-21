@@ -14,7 +14,7 @@ on:
         default: ""
 
 jobs:
-  push_manifest:
+  publish:
     name: "Push ${{ inputs.image_name }} Manifest"
     runs-on: ubuntu-latest
     permissions:

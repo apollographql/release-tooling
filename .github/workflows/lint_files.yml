@@ -37,7 +37,10 @@ jobs:
           ./compare_subset.sh ../workflows/build_and_publish.yml ../workflows/publish.yml .on.workflow_call
       - name: Compare Implementations
         working-directory: .github/scripts
+        # Below we delete `.needs` keys from what we compare in the combined workflow so that we don't
+        # get caught out by keys that could never be in the split workflow. In the case that they
+        # get included in the split workflow they'll still be captured
         run: |
-          diff <(yq ".jobs.build" ../workflows/build_and_publish.yml) <(yq ".jobs.build" ../workflows/build.yml)
-          diff <(yq ".jobs.publish" ../workflows/build_and_publish.yml) <(yq ".jobs.publish" ../workflows/publish.yml)
+          diff <(yq ".jobs.build | del(.needs)" ../workflows/build_and_publish.yml) <(yq ".jobs.build" ../workflows/build.yml)
+          diff <(yq ".jobs.publish | del(.needs)" ../workflows/build_and_publish.yml) <(yq ".jobs.publish" ../workflows/publish.yml)
     
