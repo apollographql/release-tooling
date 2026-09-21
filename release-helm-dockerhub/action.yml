@@ -1,12 +1,8 @@
 name: "Release Helm Chart to DockerHub"
+
 description: "Package a Helm chart from source and publish it to Apollo's public DockerHub OCI registry"
+
 inputs:
-  chart_path:
-    description: "Path to the directory containing the chart's Chart.yaml"
-    required: true
-  version:
-    description: "Chart version (the OCI tag) to publish. Must be valid semver."
-    required: true
   app_version:
     description: "Optional value for the chart's appVersion (`helm package --app-version`). Left unset if empty."
     required: false
@@ -17,10 +13,17 @@ inputs:
       (oci://registry-1.docker.io/apollograph/<name>). Defaults to the name already in Chart.yaml.
     required: false
     default: ""
+  chart_path:
+    description: "Path to the directory containing the chart's Chart.yaml"
+    required: true
   dependency_update:
     description: "When 'true', run `helm dependency update` before packaging."
     required: false
     default: "false"
+  version:
+    description: "Chart version (the OCI tag) to publish. Must be valid semver."
+    required: true
+
 outputs:
   chart_version:
     description: "The chart version that was published (the OCI tag)."
@@ -38,7 +41,6 @@ runs:
     # See: https://github.com/orgs/community/discussions/51280 for more details
     - name: "Setup Workflow Variables"
       id: globals
-      shell: bash
       run: |
         DOCKERHUB_REGISTRY_HOST=registry-1.docker.io
         PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID=platform-mgmt-service-e0izz
@@ -51,36 +53,33 @@ runs:
         echo "PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID=${PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID}" >> "${GITHUB_OUTPUT}"
         echo "PUBLISHING_SERVICE_ACCOUNT_NAME=release-tooling-automation@${PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID}.iam.gserviceaccount.com" >> "${GITHUB_OUTPUT}"
         echo "WORKLOAD_IDENTITY_PROVIDER=projects/865738624352/locations/global/workloadIdentityPools/github-d8bck/providers/github-d8bck" >> "${GITHUB_OUTPUT}"
+      shell: bash
+
     - name: Authenticate With GCP
-      id: gcp-auth
+      id: gcp_auth
       uses: 'google-github-actions/auth@fc2174804b84f912b1f6d334e9463f484f1c552d'
       with:
-        token_format: 'access_token'
         project_id: "${{ steps.globals.outputs.PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID }}"
         service_account: "${{ steps.globals.outputs.PUBLISHING_SERVICE_ACCOUNT_NAME }}"
+        token_format: 'access_token'
         workload_identity_provider: "${{ steps.globals.outputs.WORKLOAD_IDENTITY_PROVIDER }}"
+
     - name: Fetch DockerHub Credential
-      id: fetch-dockerhub-credential
+      id: fetch_dockerhub_credential
       uses: google-github-actions/get-secretmanager-secrets@50ec04d56ddf2740b0bde82926cc742f90e06d2b
       with:
         secrets: |-
           token:platform-prod-service-q8dyj/docker_hub_push_token
+
     - name: Authenticate With DockerHub Helm Registry
-      shell: bash
       run: |
-        echo "${{ steps.fetch-dockerhub-credential.outputs.token }}" | \
+        echo "${{ steps.fetch_dockerhub_credential.outputs.token }}" | \
           helm registry login "${{ steps.globals.outputs.DOCKERHUB_REGISTRY_HOST }}" \
             --username apollograph --password-stdin
+      shell: bash
+
     - name: "Package and push Helm chart"
       id: publish
-      shell: bash
-      env:
-        CHART_PATH: ${{ inputs.chart_path }}
-        VERSION: ${{ inputs.version }}
-        APP_VERSION: ${{ inputs.app_version }}
-        CHART_NAME: ${{ inputs.chart_name }}
-        DEPENDENCY_UPDATE: ${{ inputs.dependency_update }}
-        HELM_REGISTRY: ${{ steps.globals.outputs.APOLLO_HELM_REGISTRY }}
       run: |
         set -euo pipefail
 
@@ -117,9 +116,18 @@ runs:
         NAME="$(yq '.name' "${CHART_PATH}/Chart.yaml")"
         echo "chart_version=${VERSION}" >> "${GITHUB_OUTPUT}"
         echo "oci_ref=${HELM_REGISTRY}/${NAME}:${VERSION}" >> "${GITHUB_OUTPUT}"
+      env:
+        CHART_PATH: ${{ inputs.chart_path }}
+        VERSION: ${{ inputs.version }}
+        APP_VERSION: ${{ inputs.app_version }}
+        CHART_NAME: ${{ inputs.chart_name }}
+        DEPENDENCY_UPDATE: ${{ inputs.dependency_update }}
+        HELM_REGISTRY: ${{ steps.globals.outputs.APOLLO_HELM_REGISTRY }}
+      shell: bash
+
     # Drop credentials before returning control to the caller so a push-scoped
     # token isn't left loaded for any subsequent helm/docker invocations.
     - name: "Log out of registries"
       if: always()
-      shell: bash
       run: helm registry logout "${{ steps.globals.outputs.DOCKERHUB_REGISTRY_HOST }}" || true
+      shell: bash

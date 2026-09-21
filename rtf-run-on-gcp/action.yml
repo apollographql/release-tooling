@@ -1,22 +1,8 @@
 name: "Run RTF Test Plan on GCP VM"
+
 description: "Run an RTF test plan on a dedicated GCP VM with optional Slack progress reporting"
 
 inputs:
-  test_plan_path:
-    description: "Path to the test plan YAML file (relative to repo root)"
-    required: true
-  variables_file:
-    description: "Path to a JSON file containing template variables"
-    required: false
-  slack_channel_id:
-    description: "Slack channel ID for progress updates (RTFBot must be a member)"
-    required: false
-  slack_token:
-    description: "Slack bot token for posting messages"
-    required: false
-  github_token:
-    description: "GitHub token for GitHub providers"
-    required: false
   apollo_key:
     description: "Apollo API key for GraphOS providers"
     required: false
@@ -25,6 +11,21 @@ inputs:
     required: false
   dd_api_key:
     description: "Datadog API key for metric emission during test runs"
+    required: false
+  github_token:
+    description: "GitHub token for GitHub providers"
+    required: false
+  slack_channel_id:
+    description: "Slack channel ID for progress updates (RTFBot must be a member)"
+    required: false
+  slack_token:
+    description: "Slack bot token for posting messages"
+    required: false
+  test_plan_path:
+    description: "Path to the test plan YAML file (relative to repo root)"
+    required: true
+  variables_file:
+    description: "Path to a JSON file containing template variables"
     required: false
   vm_timeout:
     description: "Maximum VM runtime duration (e.g., '6h', '2h30m')"
@@ -41,7 +42,6 @@ runs:
     # See: https://github.com/orgs/community/discussions/51280
     - name: "Setup Workflow Variables"
       id: globals
-      shell: bash
       run: |
         # GCP configuration - using rtf-morgue-github-actions SA for everything
         # This is the simplest approach (Option 2) - single SA, single Workload Identity
@@ -58,10 +58,11 @@ runs:
 
         # RTF toolbox image location
         echo "RTF_IMAGE=us-central1-docker.pkg.dev/platform-cross-environment/apollo-private-docker/rtf-toolbox:edge" >> "${GITHUB_OUTPUT}"
+      shell: bash
 
     # Single GCP authentication using rtf-morgue-github-actions service account
     - name: "Authenticate With GCP"
-      id: gcp-auth
+      id: gcp_auth
       uses: "google-github-actions/auth@fc2174804b84f912b1f6d334e9463f484f1c552d"
       with:
         project_id: "${{ steps.globals.outputs.GCP_PROJECT }}"
@@ -76,15 +77,17 @@ runs:
 
     # Setup SSH for gcloud
     - name: "Setup SSH for gcloud"
-      shell: bash
       run: |
         mkdir -p ~/.ssh
         ssh-keygen -t rsa -f ~/.ssh/google_compute_engine -N ""
         gcloud config set core/disable_prompts true
+      shell: bash
 
     # Run the test plan on GCP VM
     - name: "Run Test Plan on GCP VM"
-      shell: bash
+      run: |
+        ACTION_PATH="${{ github.action_path }}"
+        "${ACTION_PATH}/scripts/run-on-gcp.sh"
       env:
         # Inputs
         TEST_PLAN_PATH: ${{ inputs.test_plan_path }}
@@ -107,6 +110,4 @@ runs:
         TRIGGERING_USER: ${{ github.triggering_actor }}
         GH_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         REPO_NAME: ${{ github.event.repository.name }}
-      run: |
-        ACTION_PATH="${{ github.action_path }}"
-        "${ACTION_PATH}/scripts/run-on-gcp.sh"
+      shell: bash

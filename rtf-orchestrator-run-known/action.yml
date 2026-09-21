@@ -1,13 +1,16 @@
 name: "Run Known RTF Test Plan"
+
 description: "Run a known RTF test plan using the Orchestrator"
+
 inputs:
+  git_ref:
+    description: "Optional git ref to pull the test plan from (defaults to mainline if unset)"
   test_plan_id:
     description: "The Orchestrator ID for the test plan you want to run"
     required: true
-  git_ref:
-    description: "Optional git ref to pull the test plan from (defaults to mainline if unset)"
   vars_file:
     description: "Path to a JSON file containing template variables"
+
 outputs: {}
 
 runs:
@@ -19,7 +22,6 @@ runs:
     # See: https://github.com/orgs/community/discussions/51280 for more details
     - name: "Setup Workflow Variables"
       id: globals
-      shell: bash
       run: |
         BASE_ARTIFACT_REGISTRY_NAME=us-central1-docker.pkg.dev
         PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID=platform-mgmt-service-e0izz
@@ -39,19 +41,20 @@ runs:
         # apollo-terraform's release-tooling enrolled_repos list).
         echo "RTF_WORKLOAD_IDENTITY_PROVIDER=projects/230145797925/locations/global/workloadIdentityPools/github-actions/providers/apollographql" >> "${GITHUB_OUTPUT}"
         echo "RTF_SERVICE_ACCOUNT=release-tooling-rtf@runtime-testing-framework.iam.gserviceaccount.com" >> "${GITHUB_OUTPUT}"
+      shell: bash
 
     - name: Authenticate With GCP
-      id: gcp-auth
+      id: gcp_auth
       uses: "google-github-actions/auth@fc2174804b84f912b1f6d334e9463f484f1c552d"
       with:
         create_credentials_file: false
-        token_format: "access_token"
         project_id: "${{ steps.globals.outputs.PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID }}"
         service_account: "${{ steps.globals.outputs.PUBLISHING_SERVICE_ACCOUNT_NAME }}"
+        token_format: "access_token"
         workload_identity_provider: "${{ steps.globals.outputs.WORKLOAD_IDENTITY_PROVIDER }}"
 
     - name: Authenticate With RTF GCP Project
-      id: rtf-gcp-auth
+      id: rtf_gcp_auth
       uses: "google-github-actions/auth@fc2174804b84f912b1f6d334e9463f484f1c552d"
       with:
         create_credentials_file: true
@@ -60,12 +63,12 @@ runs:
         workload_identity_provider: "${{ steps.globals.outputs.RTF_WORKLOAD_IDENTITY_PROVIDER }}"
 
     - name: Authenticate With Internal Repository
-      id: docker-auth
+      id: docker_auth
       uses: "docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef"
       with:
-        username: "oauth2accesstoken"
-        password: "${{ steps.gcp-auth.outputs.access_token }}"
+        password: ${{ steps.gcp_auth.outputs.access_token }}
         registry: "${{ steps.globals.outputs.BASE_ARTIFACT_REGISTRY_NAME }}"
+        username: "oauth2accesstoken"
 
     # Test plans commonly reference other repos (e.g. `kind: github` file/scenario providers
     # pulling shared config from apollographql/rtf-morgue), which the rtf CLI resolves itself
@@ -74,7 +77,7 @@ runs:
     # separate from the App ArgoCD and the orchestrator server share - rather than requiring
     # every caller of this action to supply a GITHUB_TOKEN of their own.
     - name: Fetch GitHub App Credentials
-      id: github-app-secrets
+      id: github_app_secrets
       uses: "google-github-actions/get-secretmanager-secrets@50ec04d56ddf2740b0bde82926cc742f90e06d2b"
       with:
         secrets: |-
@@ -82,19 +85,14 @@ runs:
           private_key:runtime-testing-framework/github-app-private-key
 
     - name: Mint GitHub App Installation Token
-      id: github-app-token
+      id: github_app_token
       uses: "actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1"
       with:
-        app-id: "${{ steps.github-app-secrets.outputs.app_id }}"
-        private-key: "${{ steps.github-app-secrets.outputs.private_key }}"
+        app-id: ${{ steps.github_app_secrets.outputs.app_id }}
         owner: "${{ github.repository_owner }}"
+        private-key: ${{ steps.github_app_secrets.outputs.private_key }}
 
     - name: Run Test Plan
-      shell: bash
-      env:
-        RTF_IMAGE: ${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/rtf-toolbox:edge
-        RTF_CREDENTIALS_FILE: ${{ steps.rtf-gcp-auth.outputs.credentials_file_path }}
-        GITHUB_APP_TOKEN: ${{ steps.github-app-token.outputs.token }}
       run: |
         docker pull "${RTF_IMAGE}"
 
@@ -116,3 +114,8 @@ runs:
           -w "${GITHUB_WORKSPACE}" \
           "${RTF_IMAGE}" \
           rtf remote ci-run-known "${RTF_ARGS[@]}" "${{ inputs.test_plan_id }}"
+      env:
+        RTF_IMAGE: ${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/rtf-toolbox:edge
+        RTF_CREDENTIALS_FILE: ${{ steps.rtf_gcp_auth.outputs.credentials_file_path }}
+        GITHUB_APP_TOKEN: ${{ steps.github_app_token.outputs.token }}
+      shell: bash

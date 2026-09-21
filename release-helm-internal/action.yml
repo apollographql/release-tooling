@@ -1,20 +1,8 @@
 name: "Release Helm Chart to Internal Apollo Registry"
+
 description: "Package a Helm chart from source and publish it to Apollo's internal Helm registry"
+
 inputs:
-  chart_path:
-    description: "Path to the directory containing the chart's Chart.yaml"
-    required: true
-  commit_sha:
-    description: "The commit SHA the chart is built from. Used to derive the default version."
-    required: false
-    default: ${{ github.sha }}
-  version:
-    description: |
-      Chart version (the OCI tag) to publish. Must be valid semver. Defaults to `0.0.0+<commit_sha>`,
-      matching the build-metadata scheme used for development builds: the leading `0.0.0` satisfies
-      Helm's semver requirement while the SHA is what we use to pull the chart back again.
-    required: false
-    default: ""
   app_version:
     description: "Optional value for the chart's appVersion (`helm package --app-version`). Left unset if empty."
     required: false
@@ -23,10 +11,25 @@ inputs:
     description: "Optional override for the chart `name` in Chart.yaml. Determines the published repo path. Defaults to the name already in Chart.yaml."
     required: false
     default: ""
+  chart_path:
+    description: "Path to the directory containing the chart's Chart.yaml"
+    required: true
+  commit_sha:
+    description: "The commit SHA the chart is built from. Used to derive the default version."
+    required: false
+    default: ${{ github.sha }}
   dependency_update:
     description: "When 'true', run `helm dependency update` before packaging."
     required: false
     default: "false"
+  version:
+    description: |
+      Chart version (the OCI tag) to publish. Must be valid semver. Defaults to `0.0.0+<commit_sha>`,
+      matching the build-metadata scheme used for development builds: the leading `0.0.0` satisfies
+      Helm's semver requirement while the SHA is what we use to pull the chart back again.
+    required: false
+    default: ""
+
 outputs:
   chart_version:
     description: "The chart version that was published (the OCI tag)."
@@ -44,7 +47,6 @@ runs:
     # See: https://github.com/orgs/community/discussions/51280 for more details
     - name: "Setup Workflow Variables"
       id: globals
-      shell: bash
       run: |
         BASE_ARTIFACT_REGISTRY_NAME=us-central1-docker.pkg.dev
         PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID=platform-mgmt-service-e0izz
@@ -57,31 +59,26 @@ runs:
         echo "PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID=${PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID}" >> "${GITHUB_OUTPUT}"
         echo "PUBLISHING_SERVICE_ACCOUNT_NAME=release-tooling-automation@${PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID}.iam.gserviceaccount.com" >> "${GITHUB_OUTPUT}"
         echo "WORKLOAD_IDENTITY_PROVIDER=projects/865738624352/locations/global/workloadIdentityPools/github-d8bck/providers/github-d8bck" >> "${GITHUB_OUTPUT}"
+      shell: bash
+
     - name: Authenticate With GCP
-      id: gcp-auth
+      id: gcp_auth
       uses: 'google-github-actions/auth@fc2174804b84f912b1f6d334e9463f484f1c552d'
       with:
-        token_format: 'access_token'
         project_id: "${{ steps.globals.outputs.PUBLISHING_SERVICE_ACCOUNT_PROJECT_ID }}"
         service_account: "${{ steps.globals.outputs.PUBLISHING_SERVICE_ACCOUNT_NAME }}"
+        token_format: 'access_token'
         workload_identity_provider: "${{ steps.globals.outputs.WORKLOAD_IDENTITY_PROVIDER }}"
+
     - name: Authenticate With Internal Helm Registry
-      shell: bash
       run: |
-        echo "${{ steps.gcp-auth.outputs.access_token }}" | \
+        echo "${{ steps.gcp_auth.outputs.access_token }}" | \
           helm registry login "${{ steps.globals.outputs.BASE_ARTIFACT_REGISTRY_NAME }}" \
             --username oauth2accesstoken --password-stdin
+      shell: bash
+
     - name: "Package and push Helm chart"
       id: publish
-      shell: bash
-      env:
-        CHART_PATH: ${{ inputs.chart_path }}
-        COMMIT_SHA: ${{ inputs.commit_sha }}
-        VERSION: ${{ inputs.version }}
-        APP_VERSION: ${{ inputs.app_version }}
-        CHART_NAME: ${{ inputs.chart_name }}
-        DEPENDENCY_UPDATE: ${{ inputs.dependency_update }}
-        HELM_REGISTRY: ${{ steps.globals.outputs.APOLLO_HELM_REGISTRY }}
       run: |
         set -euo pipefail
 
@@ -115,9 +112,19 @@ runs:
         NAME="$(yq '.name' "${CHART_PATH}/Chart.yaml")"
         echo "chart_version=${VERSION}" >> "${GITHUB_OUTPUT}"
         echo "oci_ref=${HELM_REGISTRY}/${NAME}:${VERSION}" >> "${GITHUB_OUTPUT}"
+      env:
+        CHART_PATH: ${{ inputs.chart_path }}
+        COMMIT_SHA: ${{ inputs.commit_sha }}
+        VERSION: ${{ inputs.version }}
+        APP_VERSION: ${{ inputs.app_version }}
+        CHART_NAME: ${{ inputs.chart_name }}
+        DEPENDENCY_UPDATE: ${{ inputs.dependency_update }}
+        HELM_REGISTRY: ${{ steps.globals.outputs.APOLLO_HELM_REGISTRY }}
+      shell: bash
+
     # Drop credentials before returning control to the caller so a push-scoped
     # token isn't left loaded for any subsequent helm/docker invocations.
     - name: "Log out of registries"
       if: always()
-      shell: bash
       run: helm registry logout "${{ steps.globals.outputs.BASE_ARTIFACT_REGISTRY_NAME }}" || true
+      shell: bash
