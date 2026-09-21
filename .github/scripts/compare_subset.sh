@@ -28,9 +28,9 @@ then
     exit 0
 else
     echo "❌ $SPLIT_FILE is a NOT a subset of $COMBINED_FILE at key $KEY"
-    echo "Comparing Split File To Combined:"
+    echo "Lines in $SPLIT_FILE that are not in $COMBINED_FILE:"
     run_comparison "$SPLIT_FILE" "$COMBINED_FILE" "$KEY"
-    echo "Comparing Combined File To Split:"
+    echo "Lines in $COMBINED_FILE that are not in $SPLIT_FILE:"
     run_comparison "$COMBINED_FILE" "$SPLIT_FILE" "$KEY"
     exit 1
 fi
