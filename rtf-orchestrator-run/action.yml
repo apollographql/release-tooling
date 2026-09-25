@@ -114,11 +114,15 @@ runs:
           -v "${RTF_CREDENTIALS_FILE}:${RTF_CREDENTIALS_FILE}" \
           -e GOOGLE_APPLICATION_CREDENTIALS="${RTF_CREDENTIALS_FILE}" \
           -e GITHUB_TOKEN="${GITHUB_APP_TOKEN}" \
+          -e APOLLO_RTF_TRIGGER_REPO="${APOLLO_RTF_TRIGGER_REPO}" \
           -w "${GITHUB_WORKSPACE}" \
           "${RTF_IMAGE}" \
           rtf remote ci-run "${{ inputs.test_plan_path }}" "${RTF_ARGS[@]}"
       env:
-        RTF_IMAGE: ${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/rtf-toolbox:edge
-        RTF_CREDENTIALS_FILE: ${{ steps.rtf_gcp_auth.outputs.credentials_file_path }}
+        # Identifies the repo triggering this run to the Orchestrator, so known automation users
+        # (e.g. this action's own service account) get per-repo rather than per-user rate limits.
+        APOLLO_RTF_TRIGGER_REPO: ${{ github.repository }}
         GITHUB_APP_TOKEN: ${{ steps.github_app_token.outputs.token }}
+        RTF_CREDENTIALS_FILE: ${{ steps.rtf_gcp_auth.outputs.credentials_file_path }}
+        RTF_IMAGE: ${{ steps.globals.outputs.APOLLO_ARTIFACT_REGISTRY }}/rtf-toolbox:edge
       shell: bash
