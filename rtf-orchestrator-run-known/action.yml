@@ -5,6 +5,8 @@ description: "Run a known RTF test plan using the Orchestrator"
 inputs:
   git_ref:
     description: "Optional git ref to pull the test plan from (defaults to mainline if unset)"
+  registered_variables:
+    description: "The name of a registered variables set for this test plan to use as a base when triggering"
   test_plan_id:
     description: "The Orchestrator ID for the test plan you want to run"
     required: true
@@ -103,6 +105,9 @@ runs:
         fi
         if [[ -n "${{ inputs.git_ref }}" ]]; then
           RTF_ARGS+=("--ref" "${{ inputs.git_ref }}")
+        fi
+        if [[ -n "${{ inputs.registered_variables }}" ]]; then
+          RTF_ARGS+=("--registered-vars" "${{ inputs.registered_variables }}")
         fi
 
         docker run --rm \
